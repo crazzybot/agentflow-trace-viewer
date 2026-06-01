@@ -1,0 +1,211 @@
+[
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 1,
+    "ts": 1720000000000,
+    "type": "run:started",
+    "agent_id": null,
+    "payload": {
+      "message": "Run started",
+      "partial": null,
+      "data": null
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 2,
+    "ts": 1720000000312,
+    "type": "plan:created",
+    "agent_id": null,
+    "payload": {
+      "message": "Plan created with 3 subtasks",
+      "partial": null,
+      "data": {
+        "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "subtasks": [
+          {
+            "id": "st_1",
+            "agent_id": "agent_alpha",
+            "instruction": "Analyse the input dataset and produce summary statistics.",
+            "depends_on": [],
+            "expected_output": "A JSON object with count, mean, and stdev for each numeric column."
+          },
+          {
+            "id": "st_2",
+            "agent_id": "agent_beta",
+            "instruction": "Generate a visualisation report from the summary statistics.",
+            "depends_on": [
+              "st_1"
+            ],
+            "expected_output": "A markdown report containing embedded chart descriptions."
+          },
+          {
+            "id": "st_3",
+            "agent_id": "agent_gamma",
+            "instruction": "Write final conclusions and recommendations based on the report.",
+            "depends_on": [
+              "st_2"
+            ],
+            "expected_output": "A concise executive summary in plain English."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 3,
+    "ts": 1720000000450,
+    "type": "task:dispatched",
+    "agent_id": "agent_alpha",
+    "payload": {
+      "message": "Dispatching subtask st_1 to agent_alpha",
+      "partial": null,
+      "data": {
+        "subtask_id": "st_1",
+        "task_id": "task-0001-aaaa-bbbb-cccc"
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 4,
+    "ts": 1720000000980,
+    "type": "agent:progress",
+    "agent_id": "agent_alpha",
+    "payload": {
+      "message": "agent_alpha reading input file",
+      "partial": null,
+      "data": {
+        "tool": "file_read",
+        "input": {
+          "path": "data/input.csv"
+        }
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 5,
+    "ts": 1720000001240,
+    "type": "agent:progress",
+    "agent_id": "agent_alpha",
+    "payload": {
+      "message": "agent_alpha computing statistics",
+      "partial": null,
+      "data": {
+        "tool": "python_exec",
+        "input": {
+          "code": "import pandas as pd\ndf = pd.read_csv('data/input.csv')\nprint(df.describe().to_json())"
+        }
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 6,
+    "ts": 1720000002100,
+    "type": "agent:progress",
+    "agent_id": "agent_alpha",
+    "payload": {
+      "message": "Statistics computed successfully",
+      "partial": null,
+      "data": null
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 7,
+    "ts": 1720000002200,
+    "type": "task:dispatched",
+    "agent_id": "agent_beta",
+    "payload": {
+      "message": "Dispatching subtask st_2 to agent_beta",
+      "partial": null,
+      "data": {
+        "subtask_id": "st_2",
+        "task_id": "task-0002-dddd-eeee-ffff"
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 8,
+    "ts": 1720000002850,
+    "type": "agent:progress",
+    "agent_id": "agent_beta",
+    "payload": {
+      "message": "agent_beta generating chart descriptions",
+      "partial": null,
+      "data": {
+        "tool": "python_exec",
+        "input": {
+          "code": "# generate markdown report\nprint('# Report\\n## Distribution\\n...')"
+        }
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 9,
+    "ts": 1720000003600,
+    "type": "agent:progress",
+    "agent_id": "agent_beta",
+    "payload": {
+      "message": "Report written to disk",
+      "partial": null,
+      "data": {
+        "tool": "file_write",
+        "input": {
+          "path": "output/report.md",
+          "content": "# Visualisation Report\n\n..."
+        }
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 10,
+    "ts": 1720000003750,
+    "type": "task:dispatched",
+    "agent_id": "agent_gamma",
+    "payload": {
+      "message": "Dispatching subtask st_3 to agent_gamma",
+      "partial": null,
+      "data": {
+        "subtask_id": "st_3",
+        "task_id": "task-0003-gggg-hhhh-iiii"
+      }
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 11,
+    "ts": 1720000004200,
+    "type": "agent:progress",
+    "agent_id": "agent_gamma",
+    "payload": {
+      "message": "agent_gamma drafting executive summary",
+      "partial": null,
+      "data": null
+    }
+  },
+  {
+    "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "seq": 12,
+    "ts": 1720000005100,
+    "type": "agent:progress",
+    "agent_id": "agent_gamma",
+    "payload": {
+      "message": "Executive summary written",
+      "partial": null,
+      "data": {
+        "tool": "file_write",
+        "input": {
+          "path": "output/summary.md",
+          "content": "# Executive Summary\n\nBased on the analysis..."
+        }
+      }
+    }
+  }
+]
