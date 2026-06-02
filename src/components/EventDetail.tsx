@@ -337,9 +337,18 @@ function ToolCallSection({
                    : Object.values(input).find((v) => typeof v === "string") as string | undefined
                      ?? "";
     const timeout  = input.timeout_seconds ?? input.timeout;
+    const purpose  = typeof input.purpose === "string" ? input.purpose : null;
 
     return (
       <div className="space-y-3">
+        {purpose && (
+          <div>
+            <p className="text-xs text-gray-500 mb-1.5">Purpose</p>
+            <div className="rounded-lg border border-gray-700 bg-gray-950 p-3">
+              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{purpose}</p>
+            </div>
+          </div>
+        )}
         <CodeBlock code={command} language="bash" maxRows={30} />
         {timeout != null && (
           <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -359,9 +368,18 @@ function ToolCallSection({
                : Object.values(input).find((v) => typeof v === "string") as string | undefined
                  ?? "";
     const timeout = input.timeout_seconds ?? input.timeout;
+    const purpose = typeof input.purpose === "string" ? input.purpose : null;
 
     return (
       <div className="space-y-3">
+        {purpose && (
+          <div>
+            <p className="text-xs text-gray-500 mb-1.5">Purpose</p>
+            <div className="rounded-lg border border-gray-700 bg-gray-950 p-3">
+              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{purpose}</p>
+            </div>
+          </div>
+        )}
         <CodeBlock code={code} language="python" maxRows={30} />
         {timeout != null && (
           <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -939,30 +957,12 @@ export function EventDetail({ event, onClose }: EventDetailProps) {
     event.type === EventType.RunBudgetExceeded;
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex justify-end"
-      role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <aside
+      ref={panelRef}
+      className="event-detail-pane"
+      tabIndex={-1}
+      aria-label={`Event detail: ${event.type}`}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
-
-      {/* Panel */}
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Event detail: ${event.type}`}
-        tabIndex={-1}
-        className="
-          relative z-50 flex flex-col w-full max-w-xl
-          bg-gray-900 border-l border-gray-700
-          shadow-2xl outline-none overflow-y-auto
-        "
-        style={{ animation: "slideInRight 0.18s ease-out" }}
-      >
         {/* ── Header ────────────────────────────────────────────────────── */}
         <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-700 sticky top-0 bg-gray-900 z-10">
           <div className="flex items-center gap-3 min-w-0">
@@ -1049,11 +1049,10 @@ export function EventDetail({ event, onClose }: EventDetailProps) {
         </Collapsible>
 
         {/* ── Footer — copy JSON ────────────────────────────────────────── */}
-        <footer className="px-5 py-3 border-t border-gray-700 mt-auto sticky bottom-0 bg-gray-900">
+        <footer className="px-5 py-3 border-t border-gray-700 mt-auto bg-gray-900">
           <CopyButton json={fullPayload} />
         </footer>
-      </div>
-    </div>
+    </aside>
   );
 }
 

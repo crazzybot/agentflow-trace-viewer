@@ -115,12 +115,12 @@ function summaryTooltip(summary: RowSummary): string {
       return `subtask ${summary.subtaskId} → task ${summary.taskIdShort}…`;
     case "tool":
       if (summary.argLabel && summary.argValue) {
-        return `${summary.tool} ${summary.argLabel.toLowerCase()}: ${summary.argValue}`;
+        return `${summary.tool} ${summary.argLabel.toLowerCase()}: ${summary.argValue}${summary.purpose ? ` — Purpose: ${summary.purpose}` : ""}`;
       }
       if (summary.argValue) {
-        return `${summary.tool}(${summary.argValue})`;
+        return `${summary.tool}(${summary.argValue})${summary.purpose ? ` — Purpose: ${summary.purpose}` : ""}`;
       }
-      return summary.tool;
+      return `${summary.tool}${summary.purpose ? ` — Purpose: ${summary.purpose}` : ""}`;
   }
 }
 
@@ -134,7 +134,7 @@ function SummaryStrip({ summary, metaSummaryBg, metaIconColor }: {
   metaIconColor: string;
 }) {
   if (summary.kind === "tool") {
-    const { tool, argLabel, argValue } = summary;
+    const { tool, argLabel, argValue, purpose } = summary;
     // Truncate long values to keep rows compact; full value is in the title
     const displayValue = argValue
       ? argValue.length > 72
@@ -161,6 +161,11 @@ function SummaryStrip({ summary, metaSummaryBg, metaIconColor }: {
           <code className="timeline-summary-value timeline-summary-value--hint">
             {displayValue}
           </code>
+        )}
+        {purpose && (
+          <div className="timeline-summary-purpose text-xs text-gray-400 mt-1 truncate" title={purpose}>
+            {purpose}
+          </div>
         )}
       </div>
     );

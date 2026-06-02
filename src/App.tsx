@@ -1,26 +1,11 @@
-/**
- * App — root component for AgentFlow Trace Viewer.
- *
- * State machine (linear):
- *   idle → loading → loaded (+ optional selected event)
- *
- * Layout (once loaded):
- *   ┌──────────────────────────────────────────────────────┐
- *   │  Header (title + file info + reload button)          │
- *   ├──────────────────────────────────────────────────────┤
- *   │  FilterBar                                           │
- *   ├──────────────────────────────────────────────────────┤
- *   │  TimelineView            │  EventDetail (slide-in)   │
- *   └──────────────────────────────────────────────────────┘
- *
- * When no trace is loaded: centred FileLoader hero section.
- */
-
 import React from "react";
-import { Activity, FileJson2, X as XIcon } from "lucide-react";
+import { Activity, FileJson2, Server, AlertCircle, X as XIcon } from "lucide-react";
 import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
+import type { RunInfo } from "./types/runs";
 import { loadTrace } from "./utils/loadTrace";
+import { fetchRunEventsText, fetchRunResultsText } from "./api/agentflow";
 import { FileLoader } from "./components/FileLoader";
+import { RunSelector } from "./components/RunSelector";
 import { FilterBar } from "./components/FilterBar";
 import { TimelineView } from "./components/TimelineView";
 import { EventDetail } from "./components/EventDetail";
@@ -30,10 +15,14 @@ import "./App.css";
 // Types
 // ---------------------------------------------------------------------------
 
+type TraceSource =
+  | { type: "file"; fileName: string }
+  | { type: "api"; runId: string };
+
 type AppState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "loaded"; trace: RunTrace; fileName: string }
+  | { status: "loaded"; trace: RunTrace; source: TraceSource }
   | { status: "error"; message: string };
 
 // ---------------------------------------------------------------------------
@@ -71,10 +60,17 @@ export default function App() {
   // ── Selection state ───────────────────────────────────────────────────────
   const [selectedEvent, setSelectedEvent] = React.useState<TraceEvent | null>(null);
 
+  // ── Helpers for entering loaded state ────────────────────────────────────
+
+  function enterLoaded(trace: RunTrace, source: TraceSource) {
+    setSelectedTypes(new Set(trace.eventTypes));
+    setSelectedTimeRange([0, trace.timeRange.durationMs]);
+    setAppState({ status: "loaded", trace, source });
+  }
+
   // ── File load handler ────────────────────────────────────────────────────
 
   const handleLoad = React.useCallback((text: string, fileName: string) => {
-    // Intercept the FETCH_ERROR sentinel from FileLoader
     if (text.startsWith("FETCH_ERROR:")) {
       setAppState({ status: "error", message: text.slice("FETCH_ERROR:".length) });
       return;
@@ -83,18 +79,41 @@ export default function App() {
     setAppState({ status: "loading" });
     setSelectedEvent(null);
 
-    // Run parsing asynchronously to avoid blocking the UI thread
     setTimeout(() => {
       try {
         const trace = loadTrace(text);
-        setSelectedTypes(new Set(trace.eventTypes));
-        setSelectedTimeRange([0, trace.timeRange.durationMs]);
-        setAppState({ status: "loaded", trace, fileName });
+        enterLoaded(trace, { type: "file", fileName });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setAppState({ status: "error", message: msg });
       }
     }, 0);
+  }, []);
+
+  // ── API run load handler ──────────────────────────────────────────────────
+
+  const handleRunLoad = React.useCallback(async (run: RunInfo) => {
+    setAppState({ status: "loading" });
+    setSelectedEvent(null);
+
+    try {
+      const eventsText = await fetchRunEventsText(run.run_id);
+
+      let resultsText: string | undefined;
+      if (run.has_results) {
+        try {
+          resultsText = await fetchRunResultsText(run.run_id);
+        } catch {
+          // Results are optional — ignore errors and load without them
+        }
+      }
+
+      const trace = loadTrace(eventsText, resultsText);
+      enterLoaded(trace, { type: "api", runId: run.run_id });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAppState({ status: "error", message: msg });
+    }
   }, []);
 
   // ── Reset back to the file picker ────────────────────────────────────────
@@ -113,9 +132,11 @@ export default function App() {
     return applyFilters(appState.trace, selectedTypes, selectedTimeRange);
   }, [appState, selectedTypes, selectedTimeRange]);
 
-  // ── Render: idle / error → FileLoader hero ────────────────────────────────
+  // ── Render: idle / error / loading → two-panel hero ──────────────────────
 
   if (appState.status === "idle" || appState.status === "error" || appState.status === "loading") {
+    const isLoading = appState.status === "loading";
+
     return (
       <main className="app-hero">
         {/* Brand header */}
@@ -124,21 +145,40 @@ export default function App() {
           <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
         </div>
         <p className="app-brand-subtitle">
-          Load a JSON or JSONL trace file to inspect agent execution step-by-step.
+          Browse previous runs from the agentflow service, or load a trace file directly.
         </p>
 
-        <FileLoader
-          onLoad={handleLoad}
-          isLoading={appState.status === "loading"}
-          error={appState.status === "error" ? appState.message : null}
-        />
+        {/* Error banner */}
+        {appState.status === "error" && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 w-full max-w-2xl rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"
+          >
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" aria-hidden="true" />
+            <span>{appState.message}</span>
+          </div>
+        )}
+
+        {/* Two-panel layout: runs list + file loader */}
+        <div className="hero-panels">
+          <div className="hero-panel-section">
+            <p className="hero-panel-heading">From agentflow service</p>
+            <RunSelector onSelectRun={handleRunLoad} isLoading={isLoading} />
+          </div>
+
+          <div className="hero-panel-section">
+            <p className="hero-panel-heading">From file</p>
+            <FileLoader onLoad={handleLoad} isLoading={isLoading} />
+          </div>
+        </div>
       </main>
     );
   }
 
   // ── Render: loaded ────────────────────────────────────────────────────────
 
-  const { trace, fileName } = appState;
+  const { trace, source } = appState;
+  const sourceLabel = source.type === "file" ? source.fileName : `run_${source.runId.slice(0, 8)}…`;
 
   return (
     <div className="app-shell">
@@ -151,8 +191,17 @@ export default function App() {
         </div>
 
         <div className="app-topbar-file">
-          <FileJson2 className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
-          <span className="app-topbar-filename" title={fileName}>{fileName}</span>
+          {source.type === "file" ? (
+            <FileJson2 className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+          ) : (
+            <Server className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+          )}
+          <span
+            className="app-topbar-filename"
+            title={source.type === "file" ? source.fileName : source.runId}
+          >
+            {sourceLabel}
+          </span>
           <span className="app-topbar-runid" title={trace.run_id}>
             run&nbsp;{trace.run_id.slice(0, 8)}…
           </span>
@@ -165,7 +214,7 @@ export default function App() {
           type="button"
           onClick={handleReset}
           className="app-topbar-reload"
-          aria-label="Close trace and load another file"
+          aria-label="Close trace and load another"
         >
           <XIcon className="w-3.5 h-3.5" aria-hidden="true" />
           Close
@@ -188,19 +237,24 @@ export default function App() {
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
       <div className="app-content">
-        <TimelineView
-          events={filteredEvents}
-          startMs={trace.timeRange.startMs}
-          selectedEvent={selectedEvent}
-          onSelectEvent={setSelectedEvent}
-        />
-      </div>
+        <div className="app-main-split">
+          <div className="timeline-container">
+            <TimelineView
+              events={filteredEvents}
+              startMs={trace.timeRange.startMs}
+              selectedEvent={selectedEvent}
+              onSelectEvent={setSelectedEvent}
+            />
+          </div>
 
-      {/* ── Event detail panel ───────────────────────────────────────────── */}
-      <EventDetail
-        event={selectedEvent}
-        onClose={() => setSelectedEvent(null)}
-      />
+          {selectedEvent && (
+            <EventDetail
+              event={selectedEvent}
+              onClose={() => setSelectedEvent(null)}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

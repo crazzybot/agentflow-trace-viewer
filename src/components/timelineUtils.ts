@@ -225,7 +225,7 @@ export function classifyTool(toolName: string): ToolCategory | undefined {
  */
 export type RowSummary =
   | { kind: "message"; text: string }
-  | { kind: "tool"; tool: string; argLabel?: string; argValue?: string }
+  | { kind: "tool"; tool: string; argLabel?: string; argValue?: string; purpose?: string }
   | { kind: "plan"; count: number }
   | { kind: "dispatch"; subtaskId: string; taskIdShort: string };
 
@@ -254,6 +254,7 @@ export function payloadSummaryStructured(event: TraceEvent): RowSummary {
         return { kind: "message", text: event.payload.message };
       }
       const { tool, input } = event.payload.data;
+      const purpose = typeof input.purpose === "string" ? input.purpose : undefined;
       const category = classifyTool(tool);
 
       if (category) {
@@ -267,13 +268,14 @@ export function payloadSummaryStructured(event: TraceEvent): RowSummary {
           tool,
           argLabel: category.label,
           argValue: val,
+          purpose,
         };
       }
 
       // Generic tool without a category: show first string arg as hint
       const firstVal = Object.values(input)[0];
       const hint = typeof firstVal === "string" ? firstVal : undefined;
-      return { kind: "tool", tool, argLabel: undefined, argValue: hint };
+      return { kind: "tool", tool, argLabel: undefined, argValue: hint, purpose };
     }
 
     default:
