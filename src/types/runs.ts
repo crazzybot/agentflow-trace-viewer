@@ -3,4 +3,10 @@ export interface RunInfo {
   has_events: boolean;
   has_results: boolean;
   has_report: boolean;
+  /** Short display name assigned by the service, if available. */
+  name?: string | null;
+  /** The task text submitted for this run, if available. */
+  task?: string | null;
+  /** ISO-8601 creation timestamp, if available. */
+  created_at?: string | null;
 }

@@ -322,6 +322,8 @@ export interface TimelineViewProps {
   selectedEvent: TraceEvent | null;
   onSelectEvent: (event: TraceEvent) => void;
   emptyMessage?: string;
+  /** When true, scrolls to the bottom whenever the event list grows (live streaming mode). */
+  scrollToEnd?: boolean;
 }
 
 export function TimelineView({
@@ -330,8 +332,10 @@ export function TimelineView({
   selectedEvent,
   onSelectEvent,
   emptyMessage = "No events match the current filters.",
+  scrollToEnd = false,
 }: TimelineViewProps) {
   const listRef = React.useRef<HTMLDivElement>(null);
+  const bottomRef = React.useRef<HTMLDivElement>(null);
 
   // Scroll selected row into view when selection changes via external means
   // (e.g. keyboard shortcut in parent).
@@ -340,6 +344,12 @@ export function TimelineView({
     const selected = listRef.current.querySelector('[aria-selected="true"]');
     selected?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedEvent]);
+
+  // In live mode, keep the latest event visible as new ones arrive.
+  React.useEffect(() => {
+    if (!scrollToEnd) return;
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [scrollToEnd, events.length]);
 
   if (events.length === 0) {
     return (
@@ -366,6 +376,7 @@ export function TimelineView({
           onSelect={onSelectEvent}
         />
       ))}
+      {scrollToEnd && <div ref={bottomRef} aria-hidden="true" />}
     </div>
   );
 }

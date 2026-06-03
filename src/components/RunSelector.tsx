@@ -1,10 +1,47 @@
 import React from "react";
-import { History, Loader2, WifiOff, RefreshCw, Database, FileText, FileBarChart2, ChevronRight } from "lucide-react";
+import {
+  History,
+  Loader2,
+  WifiOff,
+  RefreshCw,
+  Database,
+  FileText,
+  FileBarChart2,
+  ChevronRight,
+  Plus,
+} from "lucide-react";
 import type { RunInfo } from "../types/runs";
 import { fetchRuns } from "../api/agentflow";
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatAge(isoString: string): string {
+  const ms = Date.now() - new Date(isoString).getTime();
+  if (isNaN(ms) || ms < 0) return "";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hr ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d} day${d === 1 ? "" : "s"} ago`;
+  return new Date(isoString).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max) + "…" : text;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export interface RunSelectorProps {
   onSelectRun: (run: RunInfo) => void;
+  onNewRun: () => void;
   isLoading?: boolean;
 }
 
@@ -13,7 +50,7 @@ type FetchState =
   | { status: "loaded"; runs: RunInfo[] }
   | { status: "error" };
 
-export function RunSelector({ onSelectRun, isLoading = false }: RunSelectorProps) {
+export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSelectorProps) {
   const [fetchState, setFetchState] = React.useState<FetchState>({ status: "loading" });
 
   const load = React.useCallback(async () => {
@@ -35,17 +72,29 @@ export function RunSelector({ onSelectRun, isLoading = false }: RunSelectorProps
           <History className="w-4 h-4 text-indigo-600" aria-hidden="true" />
           <span>Recent Runs</span>
         </div>
-        {fetchState.status !== "loading" && (
+        <div className="run-selector-header-actions">
+          {fetchState.status !== "loading" && (
+            <button
+              type="button"
+              onClick={load}
+              disabled={isLoading}
+              className="run-selector-refresh"
+              aria-label="Refresh runs list"
+            >
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          )}
           <button
             type="button"
-            onClick={load}
+            onClick={onNewRun}
             disabled={isLoading}
-            className="run-selector-refresh"
-            aria-label="Refresh runs list"
+            className="run-selector-new-btn"
+            aria-label="Create new run"
           >
-            <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+            New Run
           </button>
-        )}
+        </div>
       </div>
 
       <div className="run-selector-body">
@@ -84,29 +133,51 @@ export function RunSelector({ onSelectRun, isLoading = false }: RunSelectorProps
                   onClick={() => onSelectRun(run)}
                   disabled={isLoading || !run.has_events}
                   title={run.run_id}
-                  aria-label={`Load run ${run.run_id}`}
+                  aria-label={`Load run ${run.name ?? run.run_id}`}
                 >
-                  <span className="run-selector-row-id">{run.run_id.slice(0, 8)}…</span>
-                  <div className="run-selector-badges">
-                    {run.has_events && (
-                      <span className="run-badge run-badge--events" title="Events available">
-                        <Database className="w-2.5 h-2.5" aria-hidden="true" />
-                        Events
+                  <div className="run-selector-row-main">
+                    {/* Top line: name/id + age */}
+                    <div className="run-selector-row-top">
+                      <span className="run-selector-row-name">
+                        {run.name ?? run.run_id}
                       </span>
+                      {run.created_at && (
+                        <span className="run-selector-row-age">
+                          {formatAge(run.created_at)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Task snippet */}
+                    {run.task && (
+                      <p className="run-selector-row-task">
+                        {truncate(run.task, 90)}
+                      </p>
                     )}
-                    {run.has_results && (
-                      <span className="run-badge run-badge--results" title="Results available">
-                        <FileText className="w-2.5 h-2.5" aria-hidden="true" />
-                        Results
-                      </span>
-                    )}
-                    {run.has_report && (
-                      <span className="run-badge run-badge--report" title="Report available">
-                        <FileBarChart2 className="w-2.5 h-2.5" aria-hidden="true" />
-                        Report
-                      </span>
-                    )}
+
+                    {/* Availability badges */}
+                    <div className="run-selector-badges">
+                      {run.has_events && (
+                        <span className="run-badge run-badge--events" title="Events available">
+                          <Database className="w-2.5 h-2.5" aria-hidden="true" />
+                          Events
+                        </span>
+                      )}
+                      {run.has_results && (
+                        <span className="run-badge run-badge--results" title="Results available">
+                          <FileText className="w-2.5 h-2.5" aria-hidden="true" />
+                          Results
+                        </span>
+                      )}
+                      {run.has_report && (
+                        <span className="run-badge run-badge--report" title="Report available">
+                          <FileBarChart2 className="w-2.5 h-2.5" aria-hidden="true" />
+                          Report
+                        </span>
+                      )}
+                    </div>
                   </div>
+
                   <ChevronRight className="run-selector-chevron" aria-hidden="true" />
                 </button>
               </li>

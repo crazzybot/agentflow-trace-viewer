@@ -1,11 +1,19 @@
 import React from "react";
-import { Activity, FileJson2, Server, AlertCircle, X as XIcon } from "lucide-react";
+import {
+  Activity,
+  FileJson2,
+  Server,
+  AlertCircle,
+  X as XIcon,
+  Loader2,
+} from "lucide-react";
 import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
 import type { RunInfo } from "./types/runs";
-import { loadTrace } from "./utils/loadTrace";
-import { fetchRunEventsText, fetchRunResultsText } from "./api/agentflow";
+import { loadTrace, parseTraceEvent, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
+import { createRun, openRunStream, fetchRunEventsText, fetchRunResultsText } from "./api/agentflow";
 import { FileLoader } from "./components/FileLoader";
 import { RunSelector } from "./components/RunSelector";
+import { NewRunForm } from "./components/NewRunForm";
 import { FilterBar } from "./components/FilterBar";
 import { TimelineView } from "./components/TimelineView";
 import { EventDetail } from "./components/EventDetail";
@@ -17,16 +25,20 @@ import "./App.css";
 
 type TraceSource =
   | { type: "file"; fileName: string }
-  | { type: "api"; runId: string };
+  | { type: "api"; runId: string; name?: string | null; task?: string | null };
 
 type AppState =
   | { status: "idle" }
   | { status: "loading" }
+  | { status: "new-run"; submitError: string | null; isSubmitting: boolean }
+  | { status: "streaming"; runId: string; events: TraceEvent[]; task?: string | null }
   | { status: "loaded"; trace: RunTrace; source: TraceSource }
   | { status: "error"; message: string };
 
+const TERMINAL_EVENT_TYPES = new Set(["run:complete", "run:error", "run:budget_exceeded"]);
+
 // ---------------------------------------------------------------------------
-// Filtering helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
 function applyFilters(
@@ -37,12 +49,29 @@ function applyFilters(
   const [startOffset, endOffset] = timeRange;
   const absStart = trace.timeRange.startMs + startOffset;
   const absEnd = trace.timeRange.startMs + endOffset;
+  return trace.events.filter(
+    (e) => selectedTypes.has(e.type) && e.ts >= absStart && e.ts <= absEnd,
+  );
+}
 
-  return trace.events.filter((e) => {
-    if (!selectedTypes.has(e.type)) return false;
-    if (e.ts < absStart || e.ts > absEnd) return false;
-    return true;
-  });
+function buildTrace(runId: string, events: TraceEvent[]): RunTrace {
+  if (events.length === 0) {
+    return {
+      run_id: runId,
+      events: [],
+      eventTypes: new Set(),
+      timeRange: { startMs: 0, endMs: 0, durationMs: 0 },
+      results: [],
+    };
+  }
+  const sorted = [...events].sort((a, b) => a.seq - b.seq);
+  return {
+    run_id: runId,
+    events: sorted,
+    eventTypes: extractEventTypes(sorted),
+    timeRange: extractTimeRange(sorted),
+    results: [],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -50,17 +79,16 @@ function applyFilters(
 // ---------------------------------------------------------------------------
 
 export default function App() {
-  // ── Core state ────────────────────────────────────────────────────────────
   const [appState, setAppState] = React.useState<AppState>({ status: "idle" });
-
-  // ── Filter state (only meaningful when loaded) ─────────────────────────
   const [selectedTypes, setSelectedTypes] = React.useState<Set<EventTypeValue>>(new Set());
   const [selectedTimeRange, setSelectedTimeRange] = React.useState<[number, number]>([0, 0]);
-
-  // ── Selection state ───────────────────────────────────────────────────────
   const [selectedEvent, setSelectedEvent] = React.useState<TraceEvent | null>(null);
 
-  // ── Helpers for entering loaded state ────────────────────────────────────
+  // Accumulates SSE events outside of React state so we can read the full
+  // list synchronously inside the onmessage handler when a terminal event arrives.
+  const streamingEventsRef = React.useRef<TraceEvent[]>([]);
+
+  // ── Enter loaded state (sets filters + trace atomically) ─────────────────
 
   function enterLoaded(trace: RunTrace, source: TraceSource) {
     setSelectedTypes(new Set(trace.eventTypes));
@@ -68,55 +96,125 @@ export default function App() {
     setAppState({ status: "loaded", trace, source });
   }
 
-  // ── File load handler ────────────────────────────────────────────────────
+  // ── File load ─────────────────────────────────────────────────────────────
 
   const handleLoad = React.useCallback((text: string, fileName: string) => {
     if (text.startsWith("FETCH_ERROR:")) {
       setAppState({ status: "error", message: text.slice("FETCH_ERROR:".length) });
       return;
     }
-
     setAppState({ status: "loading" });
     setSelectedEvent(null);
-
     setTimeout(() => {
       try {
-        const trace = loadTrace(text);
-        enterLoaded(trace, { type: "file", fileName });
+        enterLoaded(loadTrace(text), { type: "file", fileName });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setAppState({ status: "error", message: msg });
+        setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
       }
     }, 0);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── API run load handler ──────────────────────────────────────────────────
+  // ── API run load (historical) ─────────────────────────────────────────────
 
   const handleRunLoad = React.useCallback(async (run: RunInfo) => {
     setAppState({ status: "loading" });
     setSelectedEvent(null);
-
     try {
       const eventsText = await fetchRunEventsText(run.run_id);
-
       let resultsText: string | undefined;
       if (run.has_results) {
-        try {
-          resultsText = await fetchRunResultsText(run.run_id);
-        } catch {
-          // Results are optional — ignore errors and load without them
-        }
+        try { resultsText = await fetchRunResultsText(run.run_id); } catch { /* optional */ }
       }
+      enterLoaded(loadTrace(eventsText, resultsText), {
+        type: "api",
+        runId: run.run_id,
+        name: run.name,
+        task: run.task,
+      });
+    } catch (err) {
+      setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-      const trace = loadTrace(eventsText, resultsText);
-      enterLoaded(trace, { type: "api", runId: run.run_id });
+  // ── New run form ──────────────────────────────────────────────────────────
+
+  function handleNewRunOpen() {
+    setAppState({ status: "new-run", submitError: null, isSubmitting: false });
+  }
+
+  async function handleNewRunSubmit(task: string, budgetUsd: number | undefined) {
+    setAppState({ status: "new-run", submitError: null, isSubmitting: true });
+    try {
+      const { run_id } = await createRun({ task, budget_usd: budgetUsd });
+      streamingEventsRef.current = [];
+      setSelectedEvent(null);
+      setAppState({ status: "streaming", runId: run_id, events: [], task });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setAppState({ status: "error", message: msg });
+      setAppState({ status: "new-run", submitError: msg, isSubmitting: false });
     }
-  }, []);
+  }
 
-  // ── Reset back to the file picker ────────────────────────────────────────
+  // ── SSE streaming ─────────────────────────────────────────────────────────
+
+  const activeRunId = appState.status === "streaming" ? appState.runId : null;
+
+  React.useEffect(() => {
+    if (!activeRunId) return;
+
+    streamingEventsRef.current = [];
+    const es = openRunStream(activeRunId);
+    let terminated = false;
+
+    es.onmessage = (e: MessageEvent) => {
+      let event: TraceEvent;
+      try {
+        event = parseTraceEvent(JSON.parse(e.data as string));
+      } catch {
+        return;
+      }
+
+      // Accumulate in the ref so the full list is readable synchronously.
+      streamingEventsRef.current = [...streamingEventsRef.current, event];
+      const snapshot = streamingEventsRef.current;
+      const isTerminal = TERMINAL_EVENT_TYPES.has(event.type);
+
+      if (isTerminal) {
+        // Build the complete trace and transition to "loaded", initialising
+        // filter state in the same batch as the app-state update.
+        const trace = buildTrace(activeRunId, snapshot);
+        setSelectedTypes(new Set(trace.eventTypes));
+        setSelectedTimeRange([0, trace.timeRange.durationMs]);
+        setAppState((prev2) => {
+          const taskHint = prev2.status === "streaming" ? prev2.task : undefined;
+          return { status: "loaded", trace, source: { type: "api", runId: activeRunId, task: taskHint } };
+        });
+        terminated = true;
+        es.close();
+      } else {
+        setAppState((prev) =>
+          prev.status === "streaming" ? { ...prev, events: snapshot } : prev,
+        );
+      }
+    };
+
+    es.onerror = () => {
+      if (!terminated) {
+        setAppState((prev) =>
+          prev.status === "streaming"
+            ? { status: "error", message: "SSE stream disconnected unexpectedly." }
+            : prev,
+        );
+      }
+      es.close();
+    };
+
+    return () => {
+      es.close();
+    };
+  }, [activeRunId]);
+
+  // ── Reset ─────────────────────────────────────────────────────────────────
 
   function handleReset() {
     setAppState({ status: "idle" });
@@ -125,21 +223,21 @@ export default function App() {
     setSelectedTimeRange([0, 0]);
   }
 
-  // ── Derived data ─────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
 
   const filteredEvents = React.useMemo<TraceEvent[]>(() => {
     if (appState.status !== "loaded") return [];
     return applyFilters(appState.trace, selectedTypes, selectedTimeRange);
   }, [appState, selectedTypes, selectedTimeRange]);
 
-  // ── Render: idle / error / loading → two-panel hero ──────────────────────
+  // =========================================================================
+  // Render: idle / loading / error  →  hero with RunSelector + FileLoader
+  // =========================================================================
 
   if (appState.status === "idle" || appState.status === "error" || appState.status === "loading") {
     const isLoading = appState.status === "loading";
-
     return (
       <main className="app-hero">
-        {/* Brand header */}
         <div className="app-brand">
           <Activity className="app-brand-icon" aria-hidden="true" />
           <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
@@ -148,7 +246,6 @@ export default function App() {
           Browse previous runs from the agentflow service, or load a trace file directly.
         </p>
 
-        {/* Error banner */}
         {appState.status === "error" && (
           <div
             role="alert"
@@ -159,13 +256,15 @@ export default function App() {
           </div>
         )}
 
-        {/* Two-panel layout: runs list + file loader */}
         <div className="hero-panels">
           <div className="hero-panel-section">
             <p className="hero-panel-heading">From agentflow service</p>
-            <RunSelector onSelectRun={handleRunLoad} isLoading={isLoading} />
+            <RunSelector
+              onSelectRun={handleRunLoad}
+              onNewRun={handleNewRunOpen}
+              isLoading={isLoading}
+            />
           </div>
-
           <div className="hero-panel-section">
             <p className="hero-panel-heading">From file</p>
             <FileLoader onLoad={handleLoad} isLoading={isLoading} />
@@ -175,15 +274,114 @@ export default function App() {
     );
   }
 
-  // ── Render: loaded ────────────────────────────────────────────────────────
+  // =========================================================================
+  // Render: new-run  →  hero with form
+  // =========================================================================
+
+  if (appState.status === "new-run") {
+    return (
+      <main className="app-hero">
+        <div className="app-brand">
+          <Activity className="app-brand-icon" aria-hidden="true" />
+          <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
+        </div>
+        <NewRunForm
+          onSubmit={handleNewRunSubmit}
+          onCancel={handleReset}
+          isSubmitting={appState.isSubmitting}
+          submitError={appState.submitError}
+        />
+      </main>
+    );
+  }
+
+  // =========================================================================
+  // Render: streaming  →  live shell (no filter bar)
+  // =========================================================================
+
+  if (appState.status === "streaming") {
+    const { runId, events, task } = appState;
+    const startMs = events[0]?.ts ?? 0;
+
+    return (
+      <div className="app-shell">
+        <header className="app-topbar">
+          <div className="app-topbar-brand">
+            <Activity className="app-topbar-icon" aria-hidden="true" />
+            <span className="app-topbar-title">AgentFlow Trace Viewer</span>
+          </div>
+
+          <div className="app-topbar-file">
+            <span className="stream-live-badge" aria-label="Live stream active">
+              <span className="stream-live-dot" aria-hidden="true" />
+              LIVE
+            </span>
+            {task ? (
+              <span className="app-topbar-filename" title={task}>
+                {task.length > 60 ? task.slice(0, 60) + "…" : task}
+              </span>
+            ) : (
+              <span className="app-topbar-runid" title={runId}>
+                run&nbsp;{runId.slice(0, 8)}…
+              </span>
+            )}
+            <span className="app-topbar-eventcount">
+              {events.length} event{events.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleReset}
+            className="app-topbar-reload"
+            aria-label="Close stream"
+          >
+            <XIcon className="w-3.5 h-3.5" aria-hidden="true" />
+            Close
+          </button>
+        </header>
+
+        {/* Status bar replaces the filter bar during live streaming */}
+        <div className="app-filterbar-wrapper">
+          <div className="stream-status-bar">
+            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" aria-hidden="true" />
+            <span className="stream-status-text">Streaming live events…</span>
+          </div>
+        </div>
+
+        <div className="app-content">
+          <div className="app-main-split">
+            <div className="timeline-container">
+              <TimelineView
+                events={events}
+                startMs={startMs}
+                selectedEvent={selectedEvent}
+                onSelectEvent={setSelectedEvent}
+                emptyMessage="Waiting for first event…"
+                scrollToEnd
+              />
+            </div>
+            {selectedEvent && (
+              <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // Render: loaded  →  full shell with filter bar
+  // =========================================================================
 
   const { trace, source } = appState;
-  const sourceLabel = source.type === "file" ? source.fileName : `run_${source.runId.slice(0, 8)}…`;
+  const sourceLabel =
+    source.type === "file"
+      ? source.fileName
+      : (source.name ?? `run_${source.runId.slice(0, 8)}…`);
 
   return (
     <div className="app-shell">
-
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="app-topbar">
         <div className="app-topbar-brand">
           <Activity className="app-topbar-icon" aria-hidden="true" />
@@ -221,7 +419,6 @@ export default function App() {
         </button>
       </header>
 
-      {/* ── Filter bar ───────────────────────────────────────────────────── */}
       <div className="app-filterbar-wrapper">
         <FilterBar
           availableTypes={trace.eventTypes}
@@ -235,7 +432,6 @@ export default function App() {
         />
       </div>
 
-      {/* ── Main content ─────────────────────────────────────────────────── */}
       <div className="app-content">
         <div className="app-main-split">
           <div className="timeline-container">
@@ -246,12 +442,8 @@ export default function App() {
               onSelectEvent={setSelectedEvent}
             />
           </div>
-
           {selectedEvent && (
-            <EventDetail
-              event={selectedEvent}
-              onClose={() => setSelectedEvent(null)}
-            />
+            <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
           )}
         </div>
       </div>
