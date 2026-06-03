@@ -573,6 +573,17 @@ function AgentProgressDetail({
   event: Extract<TraceEvent, { type: typeof EventType.AgentProgress }>;
 }) {
   const data = event.payload.data;
+  const input = data?.input || null;
+
+  const [argsCopied, setArgsCopied] = React.useState(false);
+  const handleCopyArgs = React.useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(input, null, 2));
+      setArgsCopied(true);
+      setTimeout(() => setArgsCopied(false), 1600);
+    } catch { /* ignore */ }
+  }, [input]);
+
 
   if (data === null) {
     // Narrative progress — show as a readable prose block
@@ -589,8 +600,6 @@ function AgentProgressDetail({
     );
   }
 
-  const { tool, input } = data;
-
   // Determine the tool's icon and accent colour
   const BASH_TOOLS   = new Set(["bash_exec", "shell_exec", "run_command", "exec"]);
   const PYTHON_TOOLS = new Set(["python_exec", "run_python", "python"]);
@@ -600,6 +609,8 @@ function AgentProgressDetail({
   let ToolIcon: React.ElementType = Wrench;
   let iconCls = "text-gray-400";
   let pillCls = "bg-gray-800 text-gray-300 ring-1 ring-gray-700";
+
+  const tool = data.tool || "unknown_tool";
 
   if (BASH_TOOLS.has(tool)) {
     ToolIcon = Terminal;
@@ -622,15 +633,6 @@ function AgentProgressDetail({
     iconCls  = "text-purple-400";
     pillCls  = "bg-purple-900/50 text-purple-300 ring-1 ring-purple-500/40";
   }
-
-  const [argsCopied, setArgsCopied] = React.useState(false);
-  const handleCopyArgs = React.useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(input, null, 2));
-      setArgsCopied(true);
-      setTimeout(() => setArgsCopied(false), 1600);
-    } catch { /* ignore */ }
-  }, [input]);
 
   return (
     <Section>
@@ -660,7 +662,7 @@ function AgentProgressDetail({
       </div>
 
       {/* ── Tool-specific argument rendering ─────────────────────────────── */}
-      <ToolCallSection tool={tool} input={input} />
+      <ToolCallSection tool={tool} input={input || {}} />
     </Section>
   );
 }
