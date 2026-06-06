@@ -24,6 +24,13 @@ export async function createRun(request: CreateRunRequest): Promise<CreateRunRes
   return res.json();
 }
 
+export async function fetchRunReport(runId: string): Promise<string> {
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(runId)}/report`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return typeof data.report === 'string' ? data.report : '';
+}
+
 export function openRunStream(runId: string): EventSource {
   return new EventSource(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(runId)}/stream`);
 }

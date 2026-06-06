@@ -10,13 +10,14 @@ import {
 import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
 import type { RunInfo } from "./types/runs";
 import { loadTrace, parseTraceEvent, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
-import { createRun, openRunStream, fetchRunEventsText, fetchRunResultsText } from "./api/agentflow";
+import { createRun, openRunStream, fetchRunEventsText, fetchRunResultsText, fetchRunReport } from "./api/agentflow";
 import { FileLoader } from "./components/FileLoader";
 import { RunSelector } from "./components/RunSelector";
 import { NewRunForm } from "./components/NewRunForm";
 import { FilterBar } from "./components/FilterBar";
 import { TimelineView } from "./components/TimelineView";
 import { EventDetail } from "./components/EventDetail";
+import { ReportViewer } from "./components/ReportViewer";
 import "./App.css";
 
 // ---------------------------------------------------------------------------
@@ -25,14 +26,14 @@ import "./App.css";
 
 type TraceSource =
   | { type: "file"; fileName: string }
-  | { type: "api"; runId: string; name?: string | null; task?: string | null };
+  | { type: "api"; runId: string; name?: string | null; task?: string | null; has_report?: boolean };
 
 type AppState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "new-run"; submitError: string | null; isSubmitting: boolean }
   | { status: "streaming"; runId: string; events: TraceEvent[]; task?: string | null }
-  | { status: "loaded"; trace: RunTrace; source: TraceSource }
+  | { status: "loaded"; trace: RunTrace; source: TraceSource; view: "events" | "report"; report: string | null; reportLoading: boolean }
   | { status: "error"; message: string };
 
 const TERMINAL_EVENT_TYPES = new Set(["run:complete", "run:error", "run:budget_exceeded"]);
@@ -93,7 +94,7 @@ export default function App() {
   function enterLoaded(trace: RunTrace, source: TraceSource) {
     setSelectedTypes(new Set(trace.eventTypes));
     setSelectedTimeRange([0, trace.timeRange.durationMs]);
-    setAppState({ status: "loaded", trace, source });
+    setAppState({ status: "loaded", trace, source, view: "events", report: null, reportLoading: false });
   }
 
   // ── File load ─────────────────────────────────────────────────────────────
@@ -112,7 +113,7 @@ export default function App() {
         setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
       }
     }, 0);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── API run load (historical) ─────────────────────────────────────────────
 
@@ -130,11 +131,12 @@ export default function App() {
         runId: run.run_id,
         name: run.name,
         task: run.task,
+        has_report: run.has_report,
       });
     } catch (err) {
       setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── New run form ──────────────────────────────────────────────────────────
 
@@ -187,7 +189,14 @@ export default function App() {
         setSelectedTimeRange([0, trace.timeRange.durationMs]);
         setAppState((prev2) => {
           const taskHint = prev2.status === "streaming" ? prev2.task : undefined;
-          return { status: "loaded", trace, source: { type: "api", runId: activeRunId, task: taskHint } };
+          return {
+            status: "loaded",
+            trace,
+            source: { type: "api", runId: activeRunId, task: taskHint },
+            view: "events" as const,
+            report: null,
+            reportLoading: false,
+          };
         });
         terminated = true;
         es.close();
@@ -371,14 +380,42 @@ export default function App() {
   }
 
   // =========================================================================
-  // Render: loaded  →  full shell with filter bar
+  // Render: loaded  →  full shell with filter bar / report view
   // =========================================================================
 
-  const { trace, source } = appState;
+  const { trace, source, view, report, reportLoading } = appState;
   const sourceLabel =
     source.type === "file"
       ? source.fileName
       : (source.name ?? `run_${source.runId.slice(0, 8)}…`);
+
+  const hasReport = source.type === "api" && !!source.has_report;
+
+  async function handleSwitchView(next: "events" | "report") {
+    if (next === view) return;
+    if (next === "report" && report === null && source.type === "api") {
+      setAppState((prev) =>
+        prev.status === "loaded" ? { ...prev, view: "report", reportLoading: true } : prev,
+      );
+      try {
+        const text = await fetchRunReport(source.runId);
+        setAppState((prev) =>
+          prev.status === "loaded" ? { ...prev, report: text, reportLoading: false } : prev,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setAppState((prev) =>
+          prev.status === "loaded"
+            ? { ...prev, report: `Error loading report: ${msg}`, reportLoading: false }
+            : prev,
+        );
+      }
+    } else {
+      setAppState((prev) =>
+        prev.status === "loaded" ? { ...prev, view: next } : prev,
+      );
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -408,6 +445,30 @@ export default function App() {
           </span>
         </div>
 
+        {/* View selector — only shown when a report is available */}
+        {hasReport && (
+          <div className="app-topbar-view-tabs" role="tablist" aria-label="Select view">
+            <button
+              role="tab"
+              aria-selected={view === "events"}
+              type="button"
+              className={`app-topbar-tab ${view === "events" ? "app-topbar-tab--active" : ""}`}
+              onClick={() => handleSwitchView("events")}
+            >
+              Events
+            </button>
+            <button
+              role="tab"
+              aria-selected={view === "report"}
+              type="button"
+              className={`app-topbar-tab ${view === "report" ? "app-topbar-tab--active" : ""}`}
+              onClick={() => handleSwitchView("report")}
+            >
+              Report
+            </button>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={handleReset}
@@ -419,33 +480,43 @@ export default function App() {
         </button>
       </header>
 
-      <div className="app-filterbar-wrapper">
-        <FilterBar
-          availableTypes={trace.eventTypes}
-          selectedTypes={selectedTypes}
-          onTypesChange={setSelectedTypes}
-          timeRange={trace.timeRange}
-          selectedTimeRange={selectedTimeRange}
-          onTimeRangeChange={setSelectedTimeRange}
-          totalCount={trace.events.length}
-          filteredCount={filteredEvents.length}
-        />
-      </div>
+      {/* Filter bar — events view only */}
+      {view === "events" && (
+        <div className="app-filterbar-wrapper">
+          <FilterBar
+            availableTypes={trace.eventTypes}
+            selectedTypes={selectedTypes}
+            onTypesChange={setSelectedTypes}
+            timeRange={trace.timeRange}
+            selectedTimeRange={selectedTimeRange}
+            onTimeRangeChange={setSelectedTimeRange}
+            totalCount={trace.events.length}
+            filteredCount={filteredEvents.length}
+          />
+        </div>
+      )}
 
       <div className="app-content">
-        <div className="app-main-split">
-          <div className="timeline-container">
-            <TimelineView
-              events={filteredEvents}
-              startMs={trace.timeRange.startMs}
-              selectedEvent={selectedEvent}
-              onSelectEvent={setSelectedEvent}
-            />
+        {view === "events" ? (
+          <div className="app-main-split">
+            <div className="timeline-container">
+              <TimelineView
+                events={filteredEvents}
+                startMs={trace.timeRange.startMs}
+                selectedEvent={selectedEvent}
+                onSelectEvent={setSelectedEvent}
+              />
+            </div>
+            {selectedEvent && (
+              <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+            )}
           </div>
-          {selectedEvent && (
-            <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
-          )}
-        </div>
+        ) : (
+          <ReportViewer
+            markdown={report}
+            isLoading={reportLoading}
+          />
+        )}
       </div>
     </div>
   );

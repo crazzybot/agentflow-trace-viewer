@@ -515,6 +515,201 @@
   cursor: not-allowed;
 }
 
+/* ── Topbar view tab switcher ─────────────────────────────────────────────── */
+
+.app-topbar-view-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.app-topbar-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.6rem;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.app-topbar-tab:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-topbar-tab--active {
+  background: rgba(255, 255, 255, 0.13);
+  color: #f1f5f9;
+}
+
+/* ── Report viewer ─────────────────────────────────────────────────────────── */
+
+.report-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 2rem 1.5rem;
+}
+
+.report-prose {
+  max-width: 80ch;
+  margin: 0 auto;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: #1e293b;
+}
+
+/* Headings */
+.report-prose h1,
+.report-prose h2,
+.report-prose h3,
+.report-prose h4 {
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+  margin-top: 2em;
+  margin-bottom: 0.6em;
+}
+.report-prose h1 { font-size: 1.75rem; border-bottom: 2px solid rgba(148, 163, 184, 0.2); padding-bottom: 0.4rem; }
+.report-prose h2 { font-size: 1.35rem; border-bottom: 1px solid rgba(148, 163, 184, 0.15); padding-bottom: 0.3rem; }
+.report-prose h3 { font-size: 1.1rem; }
+.report-prose h4 { font-size: 0.95rem; }
+
+/* Paragraphs and spacing */
+.report-prose p { margin: 0.9em 0; }
+.report-prose > :first-child { margin-top: 0; }
+
+/* Lists */
+.report-prose ul,
+.report-prose ol {
+  padding-left: 1.5em;
+  margin: 0.75em 0;
+}
+.report-prose li { margin: 0.3em 0; }
+.report-prose li > p { margin: 0.4em 0; }
+.report-prose ul { list-style-type: disc; }
+.report-prose ol { list-style-type: decimal; }
+
+/* Inline code */
+.report-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: rgba(15, 23, 42, 0.07);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 0.3rem;
+  padding: 0.1em 0.35em;
+  color: #1e293b;
+}
+
+/* Code blocks */
+.report-prose pre {
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 1.1em 0;
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  line-height: 1.65;
+}
+.report-prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 1em;
+}
+
+/* Blockquotes */
+.report-prose blockquote {
+  border-left: 3px solid rgba(99, 102, 241, 0.4);
+  margin: 1em 0;
+  padding: 0.4em 1em;
+  color: #475569;
+  background: rgba(99, 102, 241, 0.04);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+/* Horizontal rule */
+.report-prose hr {
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  margin: 2em 0;
+}
+
+/* Tables */
+.report-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 1.1em 0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+.report-prose th {
+  background: rgba(241, 245, 249, 0.9);
+  font-weight: 700;
+  color: #334155;
+  text-align: left;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+.report-prose td {
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  color: #475569;
+  vertical-align: top;
+}
+.report-prose tr:last-child td { border-bottom: none; }
+.report-prose tr:nth-child(even) td { background: rgba(248, 250, 252, 0.5); }
+
+/* Links */
+.report-prose a {
+  color: #4f46e5;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.report-prose a:hover { color: #4338ca; }
+
+/* Strong / em */
+.report-prose strong { font-weight: 700; color: #0f172a; }
+.report-prose em { font-style: italic; }
+
+/* Loading / error states */
+.report-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  height: 100%;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.report-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 2rem auto;
+  max-width: 40rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: rgba(254, 242, 242, 0.9);
+  border: 1px solid rgba(252, 165, 165, 0.4);
+  font-size: 0.875rem;
+  color: #b91c1c;
+}
+
 /* ── Live stream status bar ────────────────────────────────────────────────── */
 
 .stream-live-badge {
