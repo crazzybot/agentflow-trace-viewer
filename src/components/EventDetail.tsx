@@ -924,10 +924,16 @@ export function EventDetail({ event, onClose }: EventDetailProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [event, onClose]);
 
-  // Focus the panel when it opens
+  // Focus the panel only on initial open (null → event), not on every event change.
+  // Re-focusing on every change would steal focus from the timeline row and break
+  // keyboard navigation (ArrowUp/Down would scroll the detail pane instead).
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const prevEventRef = React.useRef<TraceEvent | null>(null);
   React.useEffect(() => {
-    if (event) panelRef.current?.focus();
+    if (event && !prevEventRef.current) {
+      panelRef.current?.focus();
+    }
+    prevEventRef.current = event;
   }, [event]);
 
   if (!event) return null;

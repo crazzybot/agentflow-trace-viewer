@@ -1,5 +1,6 @@
 import { AGENTFLOW_API_URL } from '../config';
 import type { RunInfo } from '../types/runs';
+import type { RunArtifact, RunArtifactContent } from '../types/artifacts';
 
 export interface CreateRunRequest {
   task: string;
@@ -48,6 +49,19 @@ export async function fetchRunEventsText(runId: string): Promise<string> {
   const data = await res.json();
   const events = Array.isArray(data) ? data : (data.events ?? []);
   return JSON.stringify(events);
+}
+
+export async function fetchRunArtifacts(runId: string): Promise<RunArtifact[]> {
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(runId)}/artifacts`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : (data.artifacts ?? []);
+}
+
+export async function fetchRunArtifactContent(runId: string, artifactId: string): Promise<RunArtifactContent> {
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 export async function fetchRunResultsText(runId: string): Promise<string> {

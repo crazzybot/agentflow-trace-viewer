@@ -3,6 +3,7 @@ export interface RunInfo {
   has_events: boolean;
   has_results: boolean;
   has_report: boolean;
+  has_artifacts?: boolean;
   /** Short display name assigned by the service, if available. */
   name?: string | null;
   /** The task text submitted for this run, if available. */

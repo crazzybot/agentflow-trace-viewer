@@ -337,13 +337,36 @@ export function TimelineView({
   const listRef = React.useRef<HTMLDivElement>(null);
   const bottomRef = React.useRef<HTMLDivElement>(null);
 
-  // Scroll selected row into view when selection changes via external means
-  // (e.g. keyboard shortcut in parent).
+  // Scroll selected row into view when selection changes.
   React.useEffect(() => {
     if (!selectedEvent || !listRef.current) return;
     const selected = listRef.current.querySelector('[aria-selected="true"]');
     selected?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedEvent]);
+
+  function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    if (events.length === 0) return;
+    e.preventDefault();
+
+    const currentIndex = selectedEvent
+      ? events.findIndex((ev) => ev.seq === selectedEvent.seq)
+      : -1;
+
+    let nextIndex: number;
+    if (e.key === "ArrowDown") {
+      nextIndex = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, events.length - 1);
+    } else {
+      nextIndex = currentIndex === -1 ? events.length - 1 : Math.max(currentIndex - 1, 0);
+    }
+
+    if (nextIndex === currentIndex) return;
+    onSelectEvent(events[nextIndex]);
+
+    // Move DOM focus to the new row; the useEffect above handles smooth scroll.
+    const rows = listRef.current?.querySelectorAll<HTMLElement>('[role="option"]');
+    rows?.[nextIndex]?.focus({ preventScroll: true });
+  }
 
   // In live mode, keep the latest event visible as new ones arrive.
   React.useEffect(() => {
@@ -366,6 +389,7 @@ export function TimelineView({
       aria-label="Trace events"
       aria-multiselectable="false"
       className="timeline-list"
+      onKeyDown={handleListKeyDown}
     >
       {events.map((event) => (
         <TimelineRow

@@ -118,13 +118,16 @@ function parseAgentProgressPayload(raw: Record<string, unknown>): AgentProgressP
 
   if (rawData !== null && rawData !== undefined) {
     const d = requireObject(rawData, "payload.data");
-    data = {
-      tool: requireString(d["tool"], "payload.data.tool"),
-      input:
-        typeof d["input"] === "object" && d["input"] !== null
-          ? (d["input"] as Record<string, unknown>)
-          : {},
-    };
+    if (typeof d["tool"] === "string") {
+      data = {
+        tool: d["tool"],
+        input:
+          typeof d["input"] === "object" && d["input"] !== null
+            ? (d["input"] as Record<string, unknown>)
+            : {},
+      };
+    }
+    // else: non-tool-call data shape (e.g. planner exploration) — treat as null
   }
 
   return {

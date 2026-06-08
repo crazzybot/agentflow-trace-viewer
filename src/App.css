@@ -1102,6 +1102,7 @@
   display: grid;
   gap: 0.6rem;
   min-height: 0;
+  padding: 4px 6px; /* room for selection ring / box-shadow clipped by overflow:auto parent */
 }
 
 /* ── Card shell ──────────────────────────────────────────────────────────── */
@@ -1395,6 +1396,159 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   letter-spacing: 0.01em;
+}
+
+/* ── Artifacts tab layout ─────────────────────────────────────────────────
+   Two-column panel: narrow sidebar list + full-height content area.
+   ──────────────────────────────────────────────────────────────────────── */
+.artifacts-layout {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.artifacts-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 0.5rem 0;
+}
+
+.artifacts-sidebar-state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.artifacts-sidebar-state--error {
+  color: #dc2626;
+}
+
+.artifacts-sidebar-empty {
+  padding: 1rem;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.artifacts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.artifacts-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.875rem;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.artifacts-item:hover {
+  background: #eef2ff;
+}
+
+.artifacts-item--active {
+  background: #eef2ff;
+  border-left-color: #4f46e5;
+}
+
+.artifacts-item-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifacts-item--active .artifacts-item-name {
+  color: #4338ca;
+}
+
+.artifacts-item-path {
+  font-size: 0.71875rem;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.artifacts-content {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+}
+
+.artifacts-content-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  color: #94a3b8;
+  font-style: italic;
+  pointer-events: none;
+}
+
+.artifacts-content-state {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 2rem;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.artifacts-content-state--error {
+  color: #dc2626;
+}
+
+.artifacts-code-wrap {
+  position: relative;
+  height: 100%;
+}
+
+.artifacts-code-lang {
+  position: sticky;
+  top: 0;
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  margin: 0.75rem 0.75rem 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #e0e7ff;
+  color: #4338ca;
+  border-radius: 4px;
+}
+
+.artifacts-code {
+  display: block;
+  padding: 1rem 1.25rem;
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Consolas, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: #1e293b;
+  white-space: pre;
+  overflow-x: auto;
+  background: none;
+  margin: 0;
 }
 
 /* ── Slide-in animation for EventDetail side panel ───────────────────────

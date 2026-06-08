@@ -11,6 +11,7 @@ import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
 import type { RunInfo } from "./types/runs";
 import { loadTrace, parseTraceEvent, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
 import { createRun, openRunStream, fetchRunEventsText, fetchRunResultsText, fetchRunReport } from "./api/agentflow";
+import { ArtifactsViewer } from "./components/ArtifactsViewer";
 import { FileLoader } from "./components/FileLoader";
 import { RunSelector } from "./components/RunSelector";
 import { NewRunForm } from "./components/NewRunForm";
@@ -26,14 +27,14 @@ import "./App.css";
 
 type TraceSource =
   | { type: "file"; fileName: string }
-  | { type: "api"; runId: string; name?: string | null; task?: string | null; has_report?: boolean };
+  | { type: "api"; runId: string; name?: string | null; task?: string | null; has_report?: boolean; has_artifacts?: boolean };
 
 type AppState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "new-run"; submitError: string | null; isSubmitting: boolean }
   | { status: "streaming"; runId: string; events: TraceEvent[]; task?: string | null }
-  | { status: "loaded"; trace: RunTrace; source: TraceSource; view: "events" | "report"; report: string | null; reportLoading: boolean }
+  | { status: "loaded"; trace: RunTrace; source: TraceSource; view: "events" | "report" | "artifacts"; report: string | null; reportLoading: boolean }
   | { status: "error"; message: string };
 
 const TERMINAL_EVENT_TYPES = new Set(["run:complete", "run:error", "run:budget_exceeded"]);
@@ -132,6 +133,7 @@ export default function App() {
         name: run.name,
         task: run.task,
         has_report: run.has_report,
+        has_artifacts: run.has_artifacts,
       });
     } catch (err) {
       setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
@@ -390,8 +392,10 @@ export default function App() {
       : (source.name ?? `run_${source.runId.slice(0, 8)}…`);
 
   const hasReport = source.type === "api" && !!source.has_report;
+  const hasArtifacts = source.type === "api" && !!source.has_artifacts;
+  const showTabs = hasReport || hasArtifacts;
 
-  async function handleSwitchView(next: "events" | "report") {
+  async function handleSwitchView(next: "events" | "report" | "artifacts") {
     if (next === view) return;
     if (next === "report" && report === null && source.type === "api") {
       setAppState((prev) =>
@@ -445,8 +449,8 @@ export default function App() {
           </span>
         </div>
 
-        {/* View selector — only shown when a report is available */}
-        {hasReport && (
+        {/* View selector — shown when at least one extra tab is available */}
+        {showTabs && (
           <div className="app-topbar-view-tabs" role="tablist" aria-label="Select view">
             <button
               role="tab"
@@ -457,15 +461,28 @@ export default function App() {
             >
               Events
             </button>
-            <button
-              role="tab"
-              aria-selected={view === "report"}
-              type="button"
-              className={`app-topbar-tab ${view === "report" ? "app-topbar-tab--active" : ""}`}
-              onClick={() => handleSwitchView("report")}
-            >
-              Report
-            </button>
+            {hasReport && (
+              <button
+                role="tab"
+                aria-selected={view === "report"}
+                type="button"
+                className={`app-topbar-tab ${view === "report" ? "app-topbar-tab--active" : ""}`}
+                onClick={() => handleSwitchView("report")}
+              >
+                Report
+              </button>
+            )}
+            {hasArtifacts && (
+              <button
+                role="tab"
+                aria-selected={view === "artifacts"}
+                type="button"
+                className={`app-topbar-tab ${view === "artifacts" ? "app-topbar-tab--active" : ""}`}
+                onClick={() => handleSwitchView("artifacts")}
+              >
+                Artifacts
+              </button>
+            )}
           </div>
         )}
 
@@ -497,7 +514,7 @@ export default function App() {
       )}
 
       <div className="app-content">
-        {view === "events" ? (
+        {view === "events" && (
           <div className="app-main-split">
             <div className="timeline-container">
               <TimelineView
@@ -511,11 +528,12 @@ export default function App() {
               <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
             )}
           </div>
-        ) : (
-          <ReportViewer
-            markdown={report}
-            isLoading={reportLoading}
-          />
+        )}
+        {view === "report" && (
+          <ReportViewer markdown={report} isLoading={reportLoading} />
+        )}
+        {view === "artifacts" && source.type === "api" && (
+          <ArtifactsViewer runId={source.runId} />
         )}
       </div>
     </div>
