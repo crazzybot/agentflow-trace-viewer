@@ -249,6 +249,13 @@
   white-space: nowrap;
 }
 
+.run-badge--awaiting {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #d97706;
+  gap: 0.3rem;
+}
+
 .run-badge--events {
   background: rgba(99, 102, 241, 0.1);
   color: #4f46e5;
@@ -752,6 +759,33 @@
 @keyframes livePulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.stream-awaiting-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+}
+
+.stream-awaiting-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: #f59e0b;
+  animation: awaitingPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes awaitingPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
 }
 
 .stream-status-bar {
@@ -1564,6 +1598,204 @@
   overflow-x: auto;
   background: none;
   margin: 0;
+}
+
+/* ── Human-in-the-loop input panel ──────────────────────────────────────── */
+
+.hitl-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: 1.25rem;
+  background: rgba(255, 251, 235, 0.97);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.08), 0 4px 20px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(14px);
+  animation: hitlSlideIn 0.2s ease-out;
+}
+
+@keyframes hitlSlideIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hitl-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.hitl-header-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: #d97706;
+  flex-shrink: 0;
+}
+
+.hitl-header-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #92400e;
+  flex: 1;
+}
+
+.hitl-cost-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.hitl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 0.78rem;
+}
+
+.hitl-chip-label {
+  color: #92400e;
+  font-weight: 600;
+}
+
+.hitl-chip-value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #78350f;
+}
+
+.hitl-message {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #78350f;
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.9rem;
+}
+
+.hitl-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.6rem;
+  background: rgba(254, 242, 242, 0.9);
+  border: 1px solid rgba(252, 165, 165, 0.4);
+  font-size: 0.82rem;
+  color: #b91c1c;
+}
+
+.hitl-footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.hitl-budget-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.hitl-budget-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #78350f;
+  white-space: nowrap;
+}
+
+.hitl-budget-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 10rem;
+}
+
+.hitl-budget-icon {
+  position: absolute;
+  left: 0.6rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  color: #d97706;
+  pointer-events: none;
+}
+
+.hitl-budget-input {
+  width: 100%;
+  padding: 0.45rem 0.65rem 0.45rem 1.85rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: #fff;
+  font-size: 0.9rem;
+  font-family: var(--font-mono);
+  color: #1e293b;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hitl-budget-input:focus {
+  outline: none;
+  border-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.hitl-budget-input:disabled {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.hitl-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.hitl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border-radius: 0.7rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.hitl-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hitl-btn--cancel {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.8);
+  color: #475569;
+}
+
+.hitl-btn--cancel:hover:not(:disabled) {
+  background: rgba(241, 245, 249, 0.95);
+}
+
+.hitl-btn--continue {
+  border: none;
+  background: #d97706;
+  color: #fff;
+}
+
+.hitl-btn--continue:hover:not(:disabled) {
+  background: #b45309;
 }
 
 /* ── Slide-in animation for EventDetail side panel ───────────────────────

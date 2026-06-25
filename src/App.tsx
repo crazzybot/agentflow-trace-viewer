@@ -19,6 +19,8 @@ import { FilterBar } from "./components/FilterBar";
 import { TimelineView } from "./components/TimelineView";
 import { EventDetail } from "./components/EventDetail";
 import { ReportViewer } from "./components/ReportViewer";
+import { HumanInputPanel } from "./components/HumanInputPanel";
+import type { AwaitingInputData } from "./components/HumanInputPanel";
 import "./App.css";
 
 // ---------------------------------------------------------------------------
@@ -33,7 +35,7 @@ type AppState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "new-run"; submitError: string | null; isSubmitting: boolean }
-  | { status: "streaming"; runId: string; events: TraceEvent[]; task?: string | null }
+  | { status: "streaming"; runId: string; events: TraceEvent[]; task?: string | null; awaiting: AwaitingInputData | null }
   | { status: "loaded"; trace: RunTrace; source: TraceSource; view: "events" | "report" | "artifacts"; report: string | null; reportLoading: boolean }
   | { status: "error"; message: string };
 
@@ -133,9 +135,26 @@ export default function App() {
           existingEvents = parseTraceJson(await fetchRunEventsText(run.run_id));
         } catch { /* start fresh if historical fetch fails */ }
       }
+
+      // Recover awaiting-input state when re-joining a paused run.
+      let initialAwaiting: AwaitingInputData | null = null;
+      if (run.is_awaiting_input) {
+        const ev = [...existingEvents].reverse().find((e) => e.type === "run:awaiting_input");
+        if (ev) {
+          const d = ev.payload.data as Record<string, unknown> | null ?? {};
+          initialAwaiting = {
+            message: ev.payload.message,
+            requestType: typeof d["request_type"] === "string" ? d["request_type"] : "run_budget_exhausted",
+            context: typeof d["context"] === "object" && d["context"] !== null
+              ? d["context"] as Record<string, unknown>
+              : {},
+          };
+        }
+      }
+
       streamingEventsRef.current = existingEvents;
       seenSeqsRef.current = new Set(existingEvents.map((e) => e.seq));
-      setAppState({ status: "streaming", runId: run.run_id, events: existingEvents, task: run.task });
+      setAppState({ status: "streaming", runId: run.run_id, events: existingEvents, task: run.task, awaiting: initialAwaiting });
       return;
     }
 
@@ -171,7 +190,7 @@ export default function App() {
       streamingEventsRef.current = [];
       seenSeqsRef.current = new Set();
       setSelectedEvent(null);
-      setAppState({ status: "streaming", runId: run_id, events: [], task });
+      setAppState({ status: "streaming", runId: run_id, events: [], task, awaiting: null });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setAppState({ status: "new-run", submitError: msg, isSubmitting: false });
@@ -227,9 +246,21 @@ export default function App() {
         terminated = true;
         es.close();
       } else {
-        setAppState((prev) =>
-          prev.status === "streaming" ? { ...prev, events: snapshot } : prev,
-        );
+        setAppState((prev) => {
+          if (prev.status !== "streaming") return prev;
+          const next: typeof prev = { ...prev, events: snapshot };
+          if (event.type === "run:awaiting_input") {
+            const d = event.payload.data as Record<string, unknown> | null ?? {};
+            next.awaiting = {
+              message: event.payload.message,
+              requestType: typeof d["request_type"] === "string" ? d["request_type"] : "run_budget_exhausted",
+              context: typeof d["context"] === "object" && d["context"] !== null
+                ? d["context"] as Record<string, unknown>
+                : {},
+            };
+          }
+          return next;
+        });
       }
     };
 
@@ -335,7 +366,7 @@ export default function App() {
   // =========================================================================
 
   if (appState.status === "streaming") {
-    const { runId, events, task } = appState;
+    const { runId, events, task, awaiting } = appState;
     const startMs = events[0]?.ts ?? 0;
 
     return (
@@ -347,10 +378,17 @@ export default function App() {
           </div>
 
           <div className="app-topbar-file">
-            <span className="stream-live-badge" aria-label="Live stream active">
-              <span className="stream-live-dot" aria-hidden="true" />
-              LIVE
-            </span>
+            {awaiting ? (
+              <span className="stream-awaiting-badge" aria-label="Awaiting user input">
+                <span className="stream-awaiting-dot" aria-hidden="true" />
+                PAUSED
+              </span>
+            ) : (
+              <span className="stream-live-badge" aria-label="Live stream active">
+                <span className="stream-live-dot" aria-hidden="true" />
+                LIVE
+              </span>
+            )}
             {task ? (
               <span className="app-topbar-filename" title={task}>
                 {task.length > 60 ? task.slice(0, 60) + "…" : task}
@@ -376,12 +414,24 @@ export default function App() {
           </button>
         </header>
 
-        {/* Status bar replaces the filter bar during live streaming */}
+        {/* Status bar / human-input panel replaces the filter bar during streaming */}
         <div className="app-filterbar-wrapper">
-          <div className="stream-status-bar">
-            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" aria-hidden="true" />
-            <span className="stream-status-text">Streaming live events…</span>
-          </div>
+          {awaiting ? (
+            <HumanInputPanel
+              runId={runId}
+              awaiting={awaiting}
+              onDone={() =>
+                setAppState((prev) =>
+                  prev.status === "streaming" ? { ...prev, awaiting: null } : prev
+                )
+              }
+            />
+          ) : (
+            <div className="stream-status-bar">
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-500" aria-hidden="true" />
+              <span className="stream-status-text">Streaming live events…</span>
+            </div>
+          )}
         </div>
 
         <div className="app-content">

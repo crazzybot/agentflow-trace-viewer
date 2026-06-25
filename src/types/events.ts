@@ -29,6 +29,7 @@ export const EventType = {
   RunComplete: "run:complete",
   RunError: "run:error",
   RunBudgetExceeded: "run:budget_exceeded",
+  RunAwaitingInput: "run:awaiting_input",
 } as const;
 
 /** Union of all known event-type string literals. */

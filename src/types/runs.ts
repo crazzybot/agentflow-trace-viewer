@@ -6,6 +6,8 @@ export interface RunInfo {
   has_artifacts?: boolean;
   /** True when the run's SSE stream is still open and emitting events. */
   is_streaming?: boolean;
+  /** True when the run is paused and waiting for a human response. */
+  is_awaiting_input?: boolean;
   /** Short display name assigned by the service, if available. */
   name?: string | null;
   /** The task text submitted for this run, if available. */

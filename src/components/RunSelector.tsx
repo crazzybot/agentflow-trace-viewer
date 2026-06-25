@@ -7,6 +7,7 @@ import {
   Database,
   FileText,
   FileBarChart2,
+  CirclePause,
   ChevronRight,
   Plus,
 } from "lucide-react";
@@ -157,7 +158,13 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
 
                     {/* Availability badges */}
                     <div className="run-selector-badges">
-                      {run.is_streaming && (
+                      {run.is_awaiting_input && (
+                        <span className="run-badge run-badge--awaiting" title="Waiting for your input">
+                          <CirclePause className="w-2.5 h-2.5" aria-hidden="true" />
+                          Awaiting Input
+                        </span>
+                      )}
+                      {run.is_streaming && !run.is_awaiting_input && (
                         <span className="run-badge run-badge--live" title="Stream active">
                           <span className="run-badge-live-dot" aria-hidden="true" />
                           Live

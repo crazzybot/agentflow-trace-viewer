@@ -152,6 +152,16 @@ export const EVENT_META: Record<EventTypeValue, EventMeta> = {
     iconColor: "text-pink-500",
     summaryBg: "bg-pink-50 border-pink-100",
   },
+  [EventType.RunAwaitingInput]: {
+    label:     "Awaiting Input",
+    border:    "border-l-orange-500",
+    dot:       "bg-orange-500 ring-orange-300",
+    badge:     "bg-orange-950/60 text-orange-300 ring-1 ring-orange-500/40",
+    rowHover:  "hover:bg-orange-950/30",
+    icon:      "CirclePause",
+    iconColor: "text-orange-400",
+    summaryBg: "bg-orange-50 border-orange-100",
+  },
 };
 
 // ---------------------------------------------------------------------------

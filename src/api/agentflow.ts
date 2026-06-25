@@ -12,6 +12,23 @@ export interface CreateRunResponse {
   status: string;
 }
 
+export interface HumanInputResponse {
+  action: "continue" | "cancel";
+  budget_increase_usd?: number;
+}
+
+export async function submitHumanInput(runId: string, response: HumanInputResponse): Promise<void> {
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(runId)}/input`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(response),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}${text ? ': ' + text : ''}`);
+  }
+}
+
 export async function createRun(request: CreateRunRequest): Promise<CreateRunResponse> {
   const res = await fetch(`${AGENTFLOW_API_URL}/api/runs`, {
     method: 'POST',
