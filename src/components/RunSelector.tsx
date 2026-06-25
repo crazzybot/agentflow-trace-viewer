@@ -131,7 +131,7 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
                   type="button"
                   className="run-selector-row"
                   onClick={() => onSelectRun(run)}
-                  disabled={isLoading || !run.has_events}
+                  disabled={isLoading || (!run.has_events && !run.is_streaming)}
                   title={run.run_id}
                   aria-label={`Load run ${run.name ?? run.run_id}`}
                 >
@@ -157,6 +157,12 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
 
                     {/* Availability badges */}
                     <div className="run-selector-badges">
+                      {run.is_streaming && (
+                        <span className="run-badge run-badge--live" title="Stream active">
+                          <span className="run-badge-live-dot" aria-hidden="true" />
+                          Live
+                        </span>
+                      )}
                       {run.has_events && (
                         <span className="run-badge run-badge--events" title="Events available">
                           <Database className="w-2.5 h-2.5" aria-hidden="true" />

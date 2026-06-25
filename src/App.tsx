@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
 import type { RunInfo } from "./types/runs";
-import { loadTrace, parseTraceEvent, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
+import { loadTrace, parseTraceEvent, parseTraceJson, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
 import { createRun, openRunStream, fetchRunEventsText, fetchRunResultsText, fetchRunReport } from "./api/agentflow";
 import { ArtifactsViewer } from "./components/ArtifactsViewer";
 import { FileLoader } from "./components/FileLoader";
@@ -89,6 +89,9 @@ export default function App() {
   // Accumulates SSE events outside of React state so we can read the full
   // list synchronously inside the onmessage handler when a terminal event arrives.
   const streamingEventsRef = React.useRef<TraceEvent[]>([]);
+  // Tracks seq numbers already in streamingEventsRef to deduplicate SSE events
+  // when re-joining a stream that replays events we already fetched.
+  const seenSeqsRef = React.useRef<Set<number>>(new Set());
 
   // ── Enter loaded state (sets filters + trace atomically) ─────────────────
 
@@ -116,11 +119,26 @@ export default function App() {
     }, 0);
   }, []);
 
-  // ── API run load (historical) ─────────────────────────────────────────────
+  // ── API run load (historical or re-join live stream) ─────────────────────
 
   const handleRunLoad = React.useCallback(async (run: RunInfo) => {
     setAppState({ status: "loading" });
     setSelectedEvent(null);
+
+    if (run.is_streaming) {
+      // Fetch events recorded so far, then hand off to the SSE effect.
+      let existingEvents: TraceEvent[] = [];
+      if (run.has_events) {
+        try {
+          existingEvents = parseTraceJson(await fetchRunEventsText(run.run_id));
+        } catch { /* start fresh if historical fetch fails */ }
+      }
+      streamingEventsRef.current = existingEvents;
+      seenSeqsRef.current = new Set(existingEvents.map((e) => e.seq));
+      setAppState({ status: "streaming", runId: run.run_id, events: existingEvents, task: run.task });
+      return;
+    }
+
     try {
       const eventsText = await fetchRunEventsText(run.run_id);
       let resultsText: string | undefined;
@@ -151,6 +169,7 @@ export default function App() {
     try {
       const { run_id } = await createRun({ task, budget_usd: budgetUsd });
       streamingEventsRef.current = [];
+      seenSeqsRef.current = new Set();
       setSelectedEvent(null);
       setAppState({ status: "streaming", runId: run_id, events: [], task });
     } catch (err) {
@@ -166,7 +185,8 @@ export default function App() {
   React.useEffect(() => {
     if (!activeRunId) return;
 
-    streamingEventsRef.current = [];
+    // streamingEventsRef and seenSeqsRef are pre-populated by callers before
+    // entering streaming state (handleRunLoad for resume, handleNewRunSubmit for new).
     const es = openRunStream(activeRunId);
     let terminated = false;
 
@@ -177,6 +197,10 @@ export default function App() {
       } catch {
         return;
       }
+
+      // Skip events already fetched from the historical endpoint (resume case).
+      if (seenSeqsRef.current.has(event.seq)) return;
+      seenSeqsRef.current.add(event.seq);
 
       // Accumulate in the ref so the full list is readable synchronously.
       streamingEventsRef.current = [...streamingEventsRef.current, event];

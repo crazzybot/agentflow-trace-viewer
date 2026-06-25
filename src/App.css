@@ -264,6 +264,21 @@
   color: #d97706;
 }
 
+.run-badge--live {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+  gap: 0.3rem;
+}
+
+.run-badge-live-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: #10b981;
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
 .run-selector-chevron {
   width: 0.9rem;
   height: 0.9rem;
