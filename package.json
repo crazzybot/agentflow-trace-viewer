@@ -7,11 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "host": "vite --host"
   },
   "dependencies": {
     "lucide-react": "^1.17.0",
     "marked": "^18.0.4",
+    "mermaid": "^11.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
