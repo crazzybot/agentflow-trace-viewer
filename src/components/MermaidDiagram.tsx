@@ -14,6 +14,25 @@ type RenderState =
   | { status: "success"; svg: string }
   | { status: "error"; message: string };
 
+/**
+ * Removes any leftover mermaid sentinel / error elements that mermaid v11 may
+ * have appended directly to document.body during a failed (or interrupted)
+ * render.  We match by id prefix ("mermaid") but skip any element that is
+ * inside a React-controlled container so we never remove live diagram output.
+ */
+function purgeMermaidSentinels(ownId: string): void {
+  const sentinels = document.body.querySelectorAll<HTMLElement>('[id^="mermaid"]');
+  sentinels.forEach((el) => {
+    // Skip the element if it is the scratch container we created (identified by
+    // our own id) — that is managed explicitly by the caller.
+    // Also skip elements that are not direct children of body; those belong to
+    // React-rendered subtrees and must not be touched.
+    if (el.id === ownId) return;
+    if (el.parentElement !== document.body) return;
+    el.remove();
+  });
+}
+
 export function MermaidDiagram({ chart }: MermaidDiagramProps) {
   // useId generates a stable React-unique id; mermaid requires alphanumeric ids.
   const rawId = React.useId();
@@ -26,9 +45,26 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     let cancelled = false;
     setState({ status: "loading" });
 
+    // Create a detached off-screen element and attach it to document.body.
+    // Passing it as the third argument to mermaid.render() tells mermaid v11
+    // to use THIS element as its internal staging/scratch area instead of
+    // appending an arbitrary sentinel directly to document.body.  We remove
+    // the scratch element ourselves in every exit path (success, error, and
+    // effect cleanup), so it never lingers visibly on the page.
+    const scratch = document.createElement("div");
+    scratch.id = id;
+    scratch.style.cssText =
+      "position:absolute;top:-9999px;left:-9999px;visibility:hidden;pointer-events:none;";
+    document.body.appendChild(scratch);
+
     mermaid
-      .render(id, chart)
+      .render(id, chart, scratch)
       .then(({ svg, bindFunctions }) => {
+        // Always remove the scratch element first, whether we use the result or not.
+        if (document.body.contains(scratch)) document.body.removeChild(scratch);
+        // Remove any additional mermaid sentinels left by this or prior renders.
+        purgeMermaidSentinels(id);
+
         if (cancelled) return;
         setState({ status: "success", svg });
         // bindFunctions attaches interactive event listeners (e.g. for flowchart
@@ -44,6 +80,11 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
         }
       })
       .catch((err: unknown) => {
+        // Always clean up the scratch element even on error.
+        if (document.body.contains(scratch)) document.body.removeChild(scratch);
+        // Remove any additional mermaid sentinels left by this or prior renders.
+        purgeMermaidSentinels(id);
+
         if (cancelled) return;
         const message =
           err instanceof Error
@@ -56,6 +97,11 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
 
     return () => {
       cancelled = true;
+      // Cleanup if the effect is torn down before the promise settles
+      // (e.g. chart prop changes rapidly, or the component unmounts).
+      if (document.body.contains(scratch)) document.body.removeChild(scratch);
+      // Purge any sentinels that may have been left by the interrupted render.
+      purgeMermaidSentinels(id);
     };
     // chart and id are both stable/derived from props — re-run only when chart changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
