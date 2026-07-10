@@ -88,3 +88,40 @@ export async function fetchRunResultsText(runId: string): Promise<string> {
   const results = Array.isArray(data) ? data : (data.results ?? []);
   return JSON.stringify(results);
 }
+
+export async function cancelRun(runId: string): Promise<void> {
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}${text ? ': ' + text : ''}`);
+  }
+}
+
+export async function sendRunMessage(runId: string, content: string): Promise<void> {
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(runId)}/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}${text ? ': ' + text : ''}`);
+  }
+}
+
+export async function createFollowupRun(priorRunId: string, task: string, budgetUsd?: number): Promise<CreateRunResponse> {
+  const body: { task: string; budget_usd?: number } = { task };
+  if (budgetUsd !== undefined) body.budget_usd = budgetUsd;
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/runs/${encodeURIComponent(priorRunId)}/followup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}${text ? ': ' + text : ''}`);
+  }
+  return res.json();
+}

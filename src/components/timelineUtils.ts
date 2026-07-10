@@ -72,6 +72,16 @@ export const EVENT_META: Record<EventTypeValue, EventMeta> = {
     iconColor: "text-amber-500",
     summaryBg: "bg-amber-50 border-amber-100",
   },
+  [EventType.AgentThought]: {
+    label:     "Agent Thought",
+    border:    "border-l-purple-400",
+    dot:       "bg-purple-400 ring-purple-200",
+    badge:     "bg-purple-900/60 text-purple-300 ring-1 ring-purple-400/40",
+    rowHover:  "hover:bg-purple-950/30",
+    icon:      "Brain",
+    iconColor: "text-purple-400",
+    summaryBg: "bg-purple-50 border-purple-100",
+  },
   [EventType.AgentQuery]: {
     label:     "Agent Query",
     border:    "border-l-sky-500",

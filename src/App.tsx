@@ -5,22 +5,23 @@ import {
   Server,
   AlertCircle,
   X as XIcon,
-  Loader2,
 } from "lucide-react";
 import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
 import type { RunInfo } from "./types/runs";
 import { loadTrace, parseTraceEvent, parseTraceJson, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
-import { createRun, openRunStream, fetchRunEventsText, fetchRunResultsText, fetchRunReport } from "./api/agentflow";
+import { createRun, createFollowupRun, openRunStream, fetchRunEventsText, fetchRunResultsText, fetchRunReport } from "./api/agentflow";
 import { ArtifactsViewer } from "./components/ArtifactsViewer";
 import { FileLoader } from "./components/FileLoader";
 import { RunSelector } from "./components/RunSelector";
 import { NewRunForm } from "./components/NewRunForm";
+import { FollowupForm } from "./components/FollowupForm";
 import { FilterBar } from "./components/FilterBar";
 import { TimelineView } from "./components/TimelineView";
 import { EventDetail } from "./components/EventDetail";
 import { ReportViewer } from "./components/ReportViewer";
 import { HumanInputPanel } from "./components/HumanInputPanel";
 import type { AwaitingInputData } from "./components/HumanInputPanel";
+import { StreamingControlBar } from "./components/StreamingControlBar";
 import "./App.css";
 
 // ---------------------------------------------------------------------------
@@ -35,11 +36,12 @@ type AppState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "new-run"; submitError: string | null; isSubmitting: boolean }
+  | { status: "followup"; priorRunId: string; priorName?: string | null; priorTask?: string | null; submitError: string | null; isSubmitting: boolean }
   | { status: "streaming"; runId: string; events: TraceEvent[]; task?: string | null; awaiting: AwaitingInputData | null }
   | { status: "loaded"; trace: RunTrace; source: TraceSource; view: "events" | "report" | "artifacts"; report: string | null; reportLoading: boolean }
   | { status: "error"; message: string };
 
-const TERMINAL_EVENT_TYPES = new Set(["run:complete", "run:error", "run:budget_exceeded"]);
+const TERMINAL_EVENT_TYPES = new Set(["run:complete", "run:error", "run:budget_exceeded", "run:cancelled"]);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -130,10 +132,32 @@ export default function App() {
     if (run.is_streaming) {
       // Fetch events recorded so far, then hand off to the SSE effect.
       let existingEvents: TraceEvent[] = [];
+      let existingEventsText: string | undefined;
       if (run.has_events) {
         try {
-          existingEvents = parseTraceJson(await fetchRunEventsText(run.run_id));
+          existingEventsText = await fetchRunEventsText(run.run_id);
+          existingEvents = parseTraceJson(existingEventsText);
         } catch { /* start fresh if historical fetch fails */ }
+      }
+
+      // If historical events already contain a terminal event the run has
+      // finished, even though the run-list still shows is_streaming=true
+      // (race between the emitter cleanup and the list refresh). Skip SSE and
+      // go directly to loaded so we don't open a stream that immediately 404s.
+      if (existingEvents.some((e) => TERMINAL_EVENT_TYPES.has(e.type))) {
+        let resultsText: string | undefined;
+        if (run.has_results) {
+          try { resultsText = await fetchRunResultsText(run.run_id); } catch { /* optional */ }
+        }
+        enterLoaded(loadTrace(existingEventsText!, resultsText), {
+          type: "api",
+          runId: run.run_id,
+          name: run.name,
+          task: run.task,
+          has_report: run.has_report,
+          has_artifacts: run.has_artifacts,
+        });
+        return;
       }
 
       // Recover awaiting-input state when re-joining a paused run.
@@ -194,6 +218,37 @@ export default function App() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setAppState({ status: "new-run", submitError: msg, isSubmitting: false });
+    }
+  }
+
+  // ── Follow-up run ─────────────────────────────────────────────────────────
+
+  function handleFollowupOpen() {
+    if (appState.status !== "loaded" || appState.source.type !== "api") return;
+    const { source } = appState;
+    setAppState({
+      status: "followup",
+      priorRunId: source.runId,
+      priorName: source.name,
+      priorTask: source.task,
+      submitError: null,
+      isSubmitting: false,
+    });
+  }
+
+  async function handleFollowupSubmit(task: string, budgetUsd: number | undefined) {
+    if (appState.status !== "followup") return;
+    const { priorRunId } = appState;
+    setAppState((prev) => prev.status === "followup" ? { ...prev, isSubmitting: true, submitError: null } : prev);
+    try {
+      const { run_id } = await createFollowupRun(priorRunId, task, budgetUsd);
+      streamingEventsRef.current = [];
+      seenSeqsRef.current = new Set();
+      setSelectedEvent(null);
+      setAppState({ status: "streaming", runId: run_id, events: [], task, awaiting: null });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAppState((prev) => prev.status === "followup" ? { ...prev, isSubmitting: false, submitError: msg } : prev);
     }
   }
 
@@ -266,11 +321,31 @@ export default function App() {
 
     es.onerror = () => {
       if (!terminated) {
-        setAppState((prev) =>
-          prev.status === "streaming"
-            ? { status: "error", message: "SSE stream disconnected unexpectedly." }
-            : prev,
-        );
+        const snapshot = streamingEventsRef.current;
+        if (snapshot.some((e) => TERMINAL_EVENT_TYPES.has(e.type))) {
+          // Terminal event was already received (e.g. historical preload or
+          // arrived via SSE before the connection dropped). Recover gracefully.
+          const trace = buildTrace(activeRunId, snapshot);
+          setSelectedTypes(new Set(trace.eventTypes));
+          setSelectedTimeRange([0, trace.timeRange.durationMs]);
+          setAppState((prev) => {
+            const taskHint = prev.status === "streaming" ? prev.task : undefined;
+            return {
+              status: "loaded",
+              trace,
+              source: { type: "api", runId: activeRunId, task: taskHint },
+              view: "events" as const,
+              report: null,
+              reportLoading: false,
+            };
+          });
+        } else {
+          setAppState((prev) =>
+            prev.status === "streaming"
+              ? { status: "error", message: "SSE stream disconnected unexpectedly." }
+              : prev,
+          );
+        }
       }
       es.close();
     };
@@ -362,6 +437,30 @@ export default function App() {
   }
 
   // =========================================================================
+  // Render: followup  →  hero with follow-up form
+  // =========================================================================
+
+  if (appState.status === "followup") {
+    return (
+      <main className="app-hero">
+        <div className="app-brand">
+          <Activity className="app-brand-icon" aria-hidden="true" />
+          <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
+        </div>
+        <FollowupForm
+          priorRunId={appState.priorRunId}
+          priorName={appState.priorName}
+          priorTask={appState.priorTask}
+          onSubmit={handleFollowupSubmit}
+          onCancel={handleReset}
+          isSubmitting={appState.isSubmitting}
+          submitError={appState.submitError}
+        />
+      </main>
+    );
+  }
+
+  // =========================================================================
   // Render: streaming  →  live shell (no filter bar)
   // =========================================================================
 
@@ -427,10 +526,7 @@ export default function App() {
               }
             />
           ) : (
-            <div className="stream-status-bar">
-              <Loader2 className="w-4 h-4 animate-spin text-indigo-500" aria-hidden="true" />
-              <span className="stream-status-text">Streaming live events…</span>
-            </div>
+            <StreamingControlBar runId={runId} />
           )}
         </div>
 
@@ -558,6 +654,17 @@ export default function App() {
               </button>
             )}
           </div>
+        )}
+
+        {source.type === "api" && (
+          <button
+            type="button"
+            onClick={handleFollowupOpen}
+            className="app-topbar-followup-btn"
+            aria-label="Start a follow-up run using this run as context"
+          >
+            Follow-up
+          </button>
         )}
 
         <button

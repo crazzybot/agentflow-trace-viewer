@@ -21,6 +21,7 @@ export const EventType = {
   PlanCreated: "plan:created",
   TaskDispatched: "task:dispatched",
   AgentProgress: "agent:progress",
+  AgentThought: "agent:thought",
   AgentQuery: "agent:query",
   TaskComplete: "task:complete",
   TaskPartial: "task:partial",
