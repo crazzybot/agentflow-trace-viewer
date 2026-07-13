@@ -1,7 +1,9 @@
 import React from "react";
 import {
   Activity,
+  DollarSign,
   FileJson2,
+  PlusCircle,
   Server,
   AlertCircle,
   X as XIcon,
@@ -9,7 +11,16 @@ import {
 import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
 import type { RunInfo } from "./types/runs";
 import { loadTrace, parseTraceEvent, parseTraceJson, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
-import { createRun, createFollowupRun, openRunStream, fetchRunEventsText, fetchRunResultsText, fetchRunReport } from "./api/agentflow";
+import {
+  fetchRunEventsText,
+  fetchRunResultsText,
+  fetchRunReport,
+  fetchRuns,
+  openRunStream,
+  createRun,
+  createFollowupRun,
+} from "./api/agentflow";
+import { computeResultsCost, computeEventsCost } from "./utils/cost";
 import { ArtifactsViewer } from "./components/ArtifactsViewer";
 import { FileLoader } from "./components/FileLoader";
 import { RunSelector } from "./components/RunSelector";
@@ -23,6 +34,70 @@ import { HumanInputPanel } from "./components/HumanInputPanel";
 import type { AwaitingInputData } from "./components/HumanInputPanel";
 import { StreamingControlBar } from "./components/StreamingControlBar";
 import "./App.css";
+
+// ---------------------------------------------------------------------------
+// Hash Router
+// ---------------------------------------------------------------------------
+
+/**
+ * Parsed representation of the current URL hash route.
+ *
+ *  Hash string        → Route
+ *  ─────────────────────────────────────────────────────
+ *  ''  |  '#/'        → { page: 'idle' }
+ *  '#/runs/new'       → { page: 'new-run' }
+ *  '#/runs/:id'       → { page: 'run', runId: id }
+ *  '#/runs/:id/followup' → { page: 'followup', runId: id }
+ */
+type Route =
+  | { page: "idle" }
+  | { page: "new-run" }
+  | { page: "run"; runId: string }
+  | { page: "followup"; runId: string };
+
+function parseHash(hash: string): Route {
+  // Strip leading '#' if present, then normalise the path.
+  const path = hash.startsWith("#") ? hash.slice(1) : hash;
+
+  if (!path || path === "/") return { page: "idle" };
+
+  const runsNewRe = /^\/runs\/new\/?$/;
+  if (runsNewRe.test(path)) return { page: "new-run" };
+
+  const followupRe = /^\/runs\/([^/]+)\/followup\/?$/;
+  const followupMatch = followupRe.exec(path);
+  if (followupMatch) {
+    const runId = decodeURIComponent(followupMatch[1] ?? "");
+    return runId ? { page: "followup", runId } : { page: "idle" };
+  }
+
+  const runRe = /^\/runs\/([^/]+)\/?$/;
+  const runMatch = runRe.exec(path);
+  if (runMatch) {
+    const runId = decodeURIComponent(runMatch[1] ?? "");
+    return runId ? { page: "run", runId } : { page: "idle" };
+  }
+
+  return { page: "idle" };
+}
+
+function useHashRouter() {
+  const [route, setRoute] = React.useState<Route>(() => parseHash(window.location.hash));
+
+  React.useEffect(() => {
+    function onHashChange() {
+      setRoute(parseHash(window.location.hash));
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const navigate = React.useCallback((hash: string) => {
+    window.location.hash = hash;
+  }, []);
+
+  return { route, navigate };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,6 +160,8 @@ function buildTrace(runId: string, events: TraceEvent[]): RunTrace {
 // ---------------------------------------------------------------------------
 
 export default function App() {
+  const { route, navigate } = useHashRouter();
+
   const [appState, setAppState] = React.useState<AppState>({ status: "idle" });
   const [selectedTypes, setSelectedTypes] = React.useState<Set<EventTypeValue>>(new Set());
   const [selectedTimeRange, setSelectedTimeRange] = React.useState<[number, number]>([0, 0]);
@@ -96,6 +173,10 @@ export default function App() {
   // Tracks seq numbers already in streamingEventsRef to deduplicate SSE events
   // when re-joining a stream that replays events we already fetched.
   const seenSeqsRef = React.useRef<Set<number>>(new Set());
+
+  // Track whether we triggered a load from the current route so we don't
+  // re-trigger it after the resulting state change causes a re-render.
+  const lastLoadedRouteRef = React.useRef<string>("");
 
   // ── Enter loaded state (sets filters + trace atomically) ─────────────────
 
@@ -117,15 +198,21 @@ export default function App() {
     setTimeout(() => {
       try {
         enterLoaded(loadTrace(text), { type: "file", fileName });
+        // File loads don't get a URL — stay on '/' (idle hash) but show the
+        // loaded view. The hash is not updated so the browser back button still
+        // works naturally (it just stays on '/' and handleReset resets state).
       } catch (err) {
         setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
       }
     }, 0);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── API run load (historical or re-join live stream) ─────────────────────
 
   const handleRunLoad = React.useCallback(async (run: RunInfo) => {
+    // Mark this runId as handled so the route-sync effect doesn't re-trigger.
+    lastLoadedRouteRef.current = `run:${run.run_id}`;
+
     setAppState({ status: "loading" });
     setSelectedEvent(null);
 
@@ -157,6 +244,8 @@ export default function App() {
           has_report: run.has_report,
           has_artifacts: run.has_artifacts,
         });
+        // Already at '#/runs/:id' (either user clicked or URL triggered this)
+        navigate(`#/runs/${encodeURIComponent(run.run_id)}`);
         return;
       }
 
@@ -179,6 +268,7 @@ export default function App() {
       streamingEventsRef.current = existingEvents;
       seenSeqsRef.current = new Set(existingEvents.map((e) => e.seq));
       setAppState({ status: "streaming", runId: run.run_id, events: existingEvents, task: run.task, awaiting: initialAwaiting });
+      navigate(`#/runs/${encodeURIComponent(run.run_id)}`);
       return;
     }
 
@@ -196,14 +286,41 @@ export default function App() {
         has_report: run.has_report,
         has_artifacts: run.has_artifacts,
       });
+      navigate(`#/runs/${encodeURIComponent(run.run_id)}`);
     } catch (err) {
       setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
     }
-  }, []);
+  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load run by ID (for direct URL navigation / page refresh) ────────────
+
+  /**
+   * Fetches the run list, finds the run by ID, and calls handleRunLoad.
+   * Used when the user arrives directly at `#/runs/:id` without having
+   * selected the run through the UI (e.g. page refresh, back button, shared link).
+   */
+  const loadRunById = React.useCallback(async (runId: string) => {
+    setAppState({ status: "loading" });
+    setSelectedEvent(null);
+    try {
+      const runs = await fetchRuns();
+      const run = runs.find((r) => r.run_id === runId);
+      if (!run) {
+        setAppState({ status: "error", message: `Run "${runId}" not found.` });
+        navigate("#/");
+        return;
+      }
+      await handleRunLoad(run);
+    } catch (err) {
+      setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
+      navigate("#/");
+    }
+  }, [handleRunLoad, navigate]);
 
   // ── New run form ──────────────────────────────────────────────────────────
 
   function handleNewRunOpen() {
+    navigate("#/runs/new");
     setAppState({ status: "new-run", submitError: null, isSubmitting: false });
   }
 
@@ -214,6 +331,9 @@ export default function App() {
       streamingEventsRef.current = [];
       seenSeqsRef.current = new Set();
       setSelectedEvent(null);
+      // Mark handled before state + navigation so the route-sync effect is a no-op.
+      lastLoadedRouteRef.current = `run:${run_id}`;
+      navigate(`#/runs/${encodeURIComponent(run_id)}`);
       setAppState({ status: "streaming", runId: run_id, events: [], task, awaiting: null });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -226,6 +346,7 @@ export default function App() {
   function handleFollowupOpen() {
     if (appState.status !== "loaded" || appState.source.type !== "api") return;
     const { source } = appState;
+    navigate(`#/runs/${encodeURIComponent(source.runId)}/followup`);
     setAppState({
       status: "followup",
       priorRunId: source.runId,
@@ -245,6 +366,9 @@ export default function App() {
       streamingEventsRef.current = [];
       seenSeqsRef.current = new Set();
       setSelectedEvent(null);
+      // Mark handled before navigation so the route-sync effect is a no-op.
+      lastLoadedRouteRef.current = `run:${run_id}`;
+      navigate(`#/runs/${encodeURIComponent(run_id)}`);
       setAppState({ status: "streaming", runId: run_id, events: [], task, awaiting: null });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -298,6 +422,8 @@ export default function App() {
             reportLoading: false,
           };
         });
+        // The run URL stays at #/runs/:id — no navigation needed; streaming and
+        // loaded both live there.
         terminated = true;
         es.close();
       } else {
@@ -358,11 +484,130 @@ export default function App() {
   // ── Reset ─────────────────────────────────────────────────────────────────
 
   function handleReset() {
+    navigate("#/");
     setAppState({ status: "idle" });
     setSelectedEvent(null);
     setSelectedTypes(new Set());
     setSelectedTimeRange([0, 0]);
   }
+
+  // ── Route → state synchronisation (back button / direct URL) ─────────────
+  //
+  // When the hash changes externally (browser back/forward, or initial page
+  // load with a non-idle hash), we reconcile the appState to match the route.
+  //
+  // The `lastLoadedRouteRef` guard prevents the effect from re-triggering
+  // loads that were already initiated by user interactions (which update both
+  // the hash AND the state in the same action).
+
+  React.useEffect(() => {
+    const { page } = route;
+
+    // ── idle route ────────────────────────────────────────────────────────
+    if (page === "idle") {
+      // If we currently have an active run/stream, reset to idle.
+      if (
+        appState.status === "loaded" ||
+        appState.status === "streaming" ||
+        appState.status === "new-run" ||
+        appState.status === "followup"
+      ) {
+        setAppState({ status: "idle" });
+        setSelectedEvent(null);
+        setSelectedTypes(new Set());
+        setSelectedTimeRange([0, 0]);
+        lastLoadedRouteRef.current = "";
+      }
+      return;
+    }
+
+    // ── new-run route ─────────────────────────────────────────────────────
+    if (page === "new-run") {
+      if (appState.status !== "new-run") {
+        setAppState({ status: "new-run", submitError: null, isSubmitting: false });
+        lastLoadedRouteRef.current = "";
+      }
+      return;
+    }
+
+    // ── run or followup route ─────────────────────────────────────────────
+    const runId = route.runId;
+    const routeKey = `run:${runId}`;
+
+    if (page === "followup") {
+      // If we're already in followup for this run, or in loaded state for this
+      // run (user navigated back to followup hash), sync state.
+      if (appState.status === "followup" && appState.priorRunId === runId) return;
+
+      // If loaded for this run: open the followup form state.
+      if (appState.status === "loaded" && appState.source.type === "api" && appState.source.runId === runId) {
+        const { source } = appState;
+        setAppState({
+          status: "followup",
+          priorRunId: source.runId,
+          priorName: source.name,
+          priorTask: source.task,
+          submitError: null,
+          isSubmitting: false,
+        });
+        lastLoadedRouteRef.current = routeKey;
+        return;
+      }
+
+      // Cold load: fetch the run so we have its metadata for the followup form,
+      // then open the followup form. We load the run first (goes to loaded), then
+      // the followup form will be opened after — handled via a second effect trigger
+      // when the loaded state arrives and the hash is still on /followup.
+      if (lastLoadedRouteRef.current !== routeKey) {
+        lastLoadedRouteRef.current = routeKey;
+        void loadRunById(runId);
+      }
+      return;
+    }
+
+    // page === "run"
+    if (lastLoadedRouteRef.current === routeKey) {
+      // Already loading/loaded this run — don't trigger again.
+      return;
+    }
+
+    // Only load from URL if we're not already displaying this run.
+    const alreadyDisplayed =
+      (appState.status === "loaded" && appState.source.type === "api" && appState.source.runId === runId) ||
+      (appState.status === "streaming" && appState.runId === runId);
+
+    if (!alreadyDisplayed) {
+      lastLoadedRouteRef.current = routeKey;
+      void loadRunById(runId);
+    }
+
+  }, [route]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ↑ Intentionally only re-runs when `route` changes (i.e. hash changed).
+  //   Reading appState here is safe because it's just for guard checks;
+  //   we never want this to re-run just because appState changed.
+
+  // ── After a cold-load triggered by a /followup hash, open the followup form
+  //
+  // When loadRunById resolves and sets status="loaded" while the hash is still
+  // at '#/runs/:id/followup', we need to transition to the followup form.
+  React.useEffect(() => {
+    if (
+      route.page === "followup" &&
+      appState.status === "loaded" &&
+      appState.source.type === "api" &&
+      appState.source.runId === route.runId
+    ) {
+      const { source } = appState;
+      setAppState({
+        status: "followup",
+        priorRunId: source.runId,
+        priorName: source.name,
+        priorTask: source.task,
+        submitError: null,
+        isSubmitting: false,
+      });
+    }
+  }, [appState, route]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -371,9 +616,9 @@ export default function App() {
     return applyFilters(appState.trace, selectedTypes, selectedTimeRange);
   }, [appState, selectedTypes, selectedTimeRange]);
 
-  // =========================================================================
+  // ===========================================================================
   // Render: idle / loading / error  →  hero with RunSelector + FileLoader
-  // =========================================================================
+  // ===========================================================================
 
   if (appState.status === "idle" || appState.status === "error" || appState.status === "loading") {
     const isLoading = appState.status === "loading";
@@ -415,9 +660,9 @@ export default function App() {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Render: new-run  →  hero with form
-  // =========================================================================
+  // ===========================================================================
 
   if (appState.status === "new-run") {
     return (
@@ -436,9 +681,9 @@ export default function App() {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Render: followup  →  hero with follow-up form
-  // =========================================================================
+  // ===========================================================================
 
   if (appState.status === "followup") {
     return (
@@ -460,13 +705,14 @@ export default function App() {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Render: streaming  →  live shell (no filter bar)
-  // =========================================================================
+  // ===========================================================================
 
   if (appState.status === "streaming") {
     const { runId, events, task, awaiting } = appState;
     const startMs = events[0]?.ts ?? 0;
+    const streamCostUsd = computeEventsCost(events);
 
     return (
       <div className="app-shell">
@@ -500,6 +746,16 @@ export default function App() {
             <span className="app-topbar-eventcount">
               {events.length} event{events.length !== 1 ? "s" : ""}
             </span>
+            {streamCostUsd > 0 && (
+              <span
+                className="app-topbar-cost"
+                title="Total USD spent on this run"
+                aria-label={`Cost: $${streamCostUsd.toFixed(4)}`}
+              >
+                <DollarSign className="w-3 h-3" aria-hidden="true" />
+                {streamCostUsd.toFixed(4)}
+              </span>
+            )}
           </div>
 
           <button
@@ -509,7 +765,6 @@ export default function App() {
             aria-label="Close stream"
           >
             <XIcon className="w-3.5 h-3.5" aria-hidden="true" />
-            Close
           </button>
         </header>
 
@@ -551,9 +806,9 @@ export default function App() {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Render: loaded  →  full shell with filter bar / report view
-  // =========================================================================
+  // ===========================================================================
 
   const { trace, source, view, report, reportLoading } = appState;
   const sourceLabel =
@@ -565,9 +820,15 @@ export default function App() {
   const hasArtifacts = source.type === "api" && !!source.has_artifacts;
   const showTabs = hasReport || hasArtifacts;
 
+  // Compute total cost — prefer result records when available (more precise),
+  // fall back to scanning event payloads for cost data from task:complete events.
+  const totalCostUsd =
+    trace.results.length > 0
+      ? computeResultsCost(trace.results)
+      : computeEventsCost(trace.events);
+
   async function handleSwitchView(next: "events" | "report" | "artifacts") {
-    if (next === view) return;
-    if (next === "report" && report === null && source.type === "api") {
+    if (next === "report" && source.type === "api" && !report) {
       setAppState((prev) =>
         prev.status === "loaded" ? { ...prev, view: "report", reportLoading: true } : prev,
       );
@@ -607,16 +868,23 @@ export default function App() {
           )}
           <span
             className="app-topbar-filename"
-            title={source.type === "file" ? source.fileName : source.runId}
+            title={trace.run_id}
           >
             {sourceLabel}
-          </span>
-          <span className="app-topbar-runid" title={trace.run_id}>
-            run&nbsp;{trace.run_id.slice(0, 8)}…
           </span>
           <span className="app-topbar-eventcount">
             {trace.events.length} event{trace.events.length !== 1 ? "s" : ""}
           </span>
+          {totalCostUsd > 0 && (
+            <span
+              className="app-topbar-cost"
+              title="Total USD spent on this run"
+              aria-label={`Cost: $${totalCostUsd.toFixed(4)}`}
+            >
+              <DollarSign className="w-3 h-3" aria-hidden="true" />
+              {totalCostUsd.toFixed(4)}
+            </span>
+          )}
         </div>
 
         {/* View selector — shown when at least one extra tab is available */}
@@ -661,9 +929,9 @@ export default function App() {
             type="button"
             onClick={handleFollowupOpen}
             className="app-topbar-followup-btn"
-            aria-label="Start a follow-up run using this run as context"
+            aria-label="Start follow-up run"
           >
-            Follow-up
+            <PlusCircle className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
         )}
 
@@ -674,7 +942,6 @@ export default function App() {
           aria-label="Close trace and load another"
         >
           <XIcon className="w-3.5 h-3.5" aria-hidden="true" />
-          Close
         </button>
       </header>
 

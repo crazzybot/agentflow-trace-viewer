@@ -172,6 +172,16 @@ export const EVENT_META: Record<EventTypeValue, EventMeta> = {
     iconColor: "text-orange-400",
     summaryBg: "bg-orange-50 border-orange-100",
   },
+  [EventType.RunCancelled]: {
+    label:     "Run Cancelled",
+    border:    "border-l-slate-500",
+    dot:       "bg-slate-500 ring-slate-300",
+    badge:     "bg-slate-900/60 text-slate-300 ring-1 ring-slate-500/40",
+    rowHover:  "hover:bg-slate-950/30",
+    icon:      "Ban",
+    iconColor: "text-slate-400",
+    summaryBg: "bg-slate-50 border-slate-100",
+  },
 };
 
 // ---------------------------------------------------------------------------

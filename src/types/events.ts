@@ -31,6 +31,7 @@ export const EventType = {
   RunError: "run:error",
   RunBudgetExceeded: "run:budget_exceeded",
   RunAwaitingInput: "run:awaiting_input",
+  RunCancelled: "run:cancelled",
 } as const;
 
 /** Union of all known event-type string literals. */
@@ -113,6 +114,12 @@ interface BasePayload<D> {
   partial: unknown;
   /** Structured, type-specific payload data. */
   data: D;
+  /**
+   * Optional USD cost reported directly on the event payload (e.g. on
+   * `task:complete` / `run:complete`).  Present only when the backend
+   * includes per-event cost telemetry.
+   */
+  cost_usd?: number;
 }
 
 export type RunStartedPayload = BasePayload<RunStartedData>;
@@ -205,6 +212,11 @@ export interface SubtaskResult {
   tokens_used: number;
   /** Wall-clock execution time of the subtask in milliseconds. */
   duration_ms: number;
+  /**
+   * Optional USD cost for this subtask.  Present only when the backend
+   * includes cost telemetry in `results.jsonl`.
+   */
+  cost_usd?: number;
 }
 
 // ---------------------------------------------------------------------------

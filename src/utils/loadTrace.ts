@@ -391,6 +391,8 @@ export function parseResultsJson(jsonText: string): SubtaskResult[] {
       error: typeof r["error"] === "string" ? r["error"] : null,
       tokens_used: typeof r["tokens_used"] === "number" ? r["tokens_used"] : 0,
       duration_ms: typeof r["duration_ms"] === "number" ? r["duration_ms"] : 0,
+      // cost_usd is optional — only set when the backend includes it
+      ...(typeof r["cost_usd"] === "number" ? { cost_usd: r["cost_usd"] } : {}),
     };
   });
 }

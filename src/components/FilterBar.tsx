@@ -128,6 +128,7 @@ export function FilterBar({
         <div className="filterbar-chips">
           {sortedTypes.map((type) => {
             const meta = EVENT_META[type];
+            if (!meta) return null;
             const checked = selectedTypes.has(type);
             const checkboxId = `filter-type-${type.replace(/:/g, "-")}`;
             return (
