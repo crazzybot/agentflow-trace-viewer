@@ -569,11 +569,22 @@ function guessLanguageFromPath(path: string): string {
 /** agent:progress — either a tool call or a narrative message. */
 function AgentProgressDetail({
   event,
+  allEvents,
 }: {
   event: Extract<TraceEvent, { type: typeof EventType.AgentProgress }>;
+  allEvents?: TraceEvent[];
 }) {
   const data = event.payload.data;
   const input = data?.input || null;
+
+  // Look up the tool result linked by tool_call_id (top-level event field)
+  const toolCallId = event.tool_call_id;
+  const toolResult = React.useMemo(() => {
+    if (!toolCallId || !allEvents) return null;
+    return allEvents.find(
+      (e) => e.type === EventType.AgentToolResult && e.tool_call_id === toolCallId,
+    ) ?? null;
+  }, [toolCallId, allEvents]);
 
   const [argsCopied, setArgsCopied] = React.useState(false);
   const handleCopyArgs = React.useCallback(async () => {
@@ -634,36 +645,82 @@ function AgentProgressDetail({
     pillCls  = "bg-purple-900/50 text-purple-300 ring-1 ring-purple-500/40";
   }
 
-  return (
-    <Section>
-      {/* ── Tool header bar ──────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <ToolIcon className={`w-4 h-4 shrink-0 ${iconCls}`} aria-hidden />
-          <p className="text-xs uppercase tracking-widest text-gray-500">Tool Call</p>
-          <Pill className={pillCls}>{tool}</Pill>
-        </div>
-        <button
-          type="button"
-          aria-label="Copy input arguments as JSON"
-          onClick={handleCopyArgs}
-          className="
-            flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0
-            text-gray-400 hover:text-white hover:bg-gray-700
-            border border-gray-700 hover:border-gray-600
-            focus:outline-none focus:ring-1 focus:ring-blue-500
-            transition-colors
-          "
-        >
-          {argsCopied
-            ? <><Check className="w-3 h-3" aria-hidden /><span>Copied</span></>
-            : <><Copy className="w-3 h-3" aria-hidden /><span>Copy args</span></>}
-        </button>
-      </div>
+  // Extract tool result data for rendering
+  const resultData =
+    toolResult?.type === EventType.AgentToolResult ? toolResult.payload.data : null;
 
-      {/* ── Tool-specific argument rendering ─────────────────────────────── */}
-      <ToolCallSection tool={tool} input={input || {}} />
-    </Section>
+  return (
+    <>
+      <Section>
+        {/* ── Tool header bar ──────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <ToolIcon className={`w-4 h-4 shrink-0 ${iconCls}`} aria-hidden />
+            <p className="text-xs uppercase tracking-widest text-gray-500">Tool Call</p>
+            <Pill className={pillCls}>{tool}</Pill>
+          </div>
+          <button
+            type="button"
+            aria-label="Copy input arguments as JSON"
+            onClick={handleCopyArgs}
+            className="
+              flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0
+              text-gray-400 hover:text-white hover:bg-gray-700
+              border border-gray-700 hover:border-gray-600
+              focus:outline-none focus:ring-1 focus:ring-blue-500
+              transition-colors
+            "
+          >
+            {argsCopied
+              ? <><Check className="w-3 h-3" aria-hidden /><span>Copied</span></>
+              : <><Copy className="w-3 h-3" aria-hidden /><span>Copy args</span></>}
+          </button>
+        </div>
+
+        {/* ── Tool-specific argument rendering ─────────────────────────────── */}
+        <ToolCallSection tool={tool} input={input || {}} />
+      </Section>
+
+      {/* ── Tool result section ───────────────────────────────────────────── */}
+      {toolCallId && (
+        <Section>
+          <div className="flex items-center gap-2 mb-3">
+            {toolResult == null ? (
+              <>
+                <span className="inline-block w-2 h-2 rounded-full bg-gray-500 animate-pulse" aria-hidden />
+                <p className="text-xs uppercase tracking-widest text-gray-500">Tool Result — pending</p>
+              </>
+            ) : resultData?.is_error ? (
+              <>
+                <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" aria-hidden />
+                <p className="text-xs uppercase tracking-widest text-gray-500">Tool Result — error</p>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" aria-hidden />
+                <p className="text-xs uppercase tracking-widest text-gray-500">Tool Result</p>
+              </>
+            )}
+          </div>
+
+          {resultData != null && (
+            <div className={`rounded-lg border p-3 ${
+              resultData.is_error
+                ? "border-red-800/60 bg-red-950/30"
+                : "border-gray-700 bg-gray-950"
+            }`}>
+              {resultData.result ? (
+                <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap break-words leading-5 max-h-48 overflow-y-auto">
+                  {resultData.result}
+                </pre>
+              ) : (
+                <p className="text-xs text-gray-500 italic">(no output)</p>
+              )}
+            </div>
+          )}
+        </Section>
+      )}
+    </>
   );
 }
 
@@ -911,9 +968,11 @@ function RunSummaryDetail({ event }: { event: TraceEvent }) {
 export interface EventDetailProps {
   event: TraceEvent | null;
   onClose: () => void;
+  /** Full (unfiltered) event list — used to look up linked tool results. */
+  allEvents?: TraceEvent[];
 }
 
-export function EventDetail({ event, onClose }: EventDetailProps) {
+export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
   // Close on Escape
   React.useEffect(() => {
     if (!event) return;
@@ -948,6 +1007,8 @@ export function EventDetail({ event, onClose }: EventDetailProps) {
     ts:       event.ts,
     type:     event.type,
     agent_id: event.agent_id,
+    ...(event.turn_index   != null ? { turn_index:   event.turn_index   } : {}),
+    ...(event.tool_call_id != null ? { tool_call_id: event.tool_call_id } : {}),
     payload:  event.payload,
   };
 
@@ -1013,7 +1074,7 @@ export function EventDetail({ event, onClose }: EventDetailProps) {
         {/* ── Event-specific rich sections ─────────────────────────────────── */}
 
         {event.type === EventType.AgentProgress && (
-          <AgentProgressDetail event={event} />
+          <AgentProgressDetail event={event} allEvents={allEvents} />
         )}
 
         {event.type === EventType.PlanCreated && (

@@ -23,6 +23,7 @@ export const EventType = {
   AgentProgress: "agent:progress",
   AgentThought: "agent:thought",
   AgentQuery: "agent:query",
+  AgentToolResult: "agent:tool_result",
   TaskComplete: "task:complete",
   TaskPartial: "task:partial",
   TaskFailed: "task:failed",
@@ -32,6 +33,7 @@ export const EventType = {
   RunBudgetExceeded: "run:budget_exceeded",
   RunAwaitingInput: "run:awaiting_input",
   RunCancelled: "run:cancelled",
+  RunMessageReceived: "run:message_received",
 } as const;
 
 /** Union of all known event-type string literals. */
@@ -44,6 +46,7 @@ export type GenericEventType = Exclude<
   | typeof EventType.PlanCreated
   | typeof EventType.TaskDispatched
   | typeof EventType.AgentProgress
+  | typeof EventType.AgentToolResult
 >;
 
 // ---------------------------------------------------------------------------
@@ -100,6 +103,16 @@ export interface AgentProgressToolCallData {
  */
 export type AgentProgressData = AgentProgressToolCallData | null;
 
+/** payload.data for `agent:tool_result`. */
+export interface AgentToolResultData {
+  /** The tool name that produced this result. */
+  tool: string;
+  /** The tool's output text. */
+  result: string | null;
+  /** Present and `true` when the tool returned an error. */
+  is_error?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Payload objects — one per event type
 // ---------------------------------------------------------------------------
@@ -126,6 +139,7 @@ export type RunStartedPayload = BasePayload<RunStartedData>;
 export type PlanCreatedPayload = BasePayload<PlanCreatedData>;
 export type TaskDispatchedPayload = BasePayload<TaskDispatchedData>;
 export type AgentProgressPayload = BasePayload<AgentProgressData>;
+export type AgentToolResultPayload = BasePayload<AgentToolResultData>;
 
 // ---------------------------------------------------------------------------
 // Per-type event shapes
@@ -138,6 +152,18 @@ interface BaseEvent {
   seq: number;
   /** Unix timestamp in milliseconds. */
   ts: number;
+  /**
+   * LLM turn index — top-level event field that groups all events belonging
+   * to the same agent turn (thought + tool calls + results). Absent on
+   * non-agent events or older traces that predate this field.
+   */
+  turn_index?: number;
+  /**
+   * Tool-call correlation ID — top-level event field present on both the
+   * `agent:progress` tool-call event and the corresponding `agent:tool_result`
+   * event, allowing the UI to link them together.
+   */
+  tool_call_id?: string;
 }
 
 export interface RunStartedEvent extends BaseEvent {
@@ -166,6 +192,13 @@ export interface AgentProgressEvent extends BaseEvent {
   payload: AgentProgressPayload;
 }
 
+export interface AgentToolResultEvent extends BaseEvent {
+  type: typeof EventType.AgentToolResult;
+  /** The executing agent. */
+  agent_id: string;
+  payload: AgentToolResultPayload;
+}
+
 export interface GenericEvent extends BaseEvent {
   type: GenericEventType;
   agent_id: string | null;
@@ -181,6 +214,7 @@ export type TraceEvent =
   | PlanCreatedEvent
   | TaskDispatchedEvent
   | AgentProgressEvent
+  | AgentToolResultEvent
   | GenericEvent;
 
 // ---------------------------------------------------------------------------

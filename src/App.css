@@ -2065,3 +2065,248 @@
   font-size: 0.85rem;
   padding: 0.75rem 1rem;
 }
+
+/* ── Turn-group card ─────────────────────────────────────────────────────────
+   Groups a single LLM turn: thought caption + indented tool-call items.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.turn-group-card {
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-left: 4px solid #a78bfa;
+  overflow: hidden;
+  transition: box-shadow 0.14s ease, border-color 0.14s ease;
+  outline-offset: 2px;
+}
+
+.turn-group-card:hover {
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
+}
+
+.turn-group-card--has-selected {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+/* ── Thought caption row ─────────────────────────────────────────────────── */
+
+.turn-group-thought {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  background: rgba(167, 139, 250, 0.08);
+  border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  border: none;
+  outline: none;
+  transition: background-color 0.12s ease;
+}
+
+.turn-group-thought:hover {
+  background: rgba(167, 139, 250, 0.15);
+}
+
+.turn-group-thought:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.5);
+  outline-offset: -2px;
+}
+
+.turn-group-thought--selected {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.turn-group-thought-icon {
+  width: 0.8rem;
+  height: 0.8rem;
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+
+.turn-group-thought-text {
+  flex: 1;
+  font-size: 0.78rem;
+  color: #6d28d9;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.turn-group-thought-time {
+  font-size: 0.68rem;
+  color: #a78bfa;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+/* ── No-thought header (turn group without a thought event) ─────────────── */
+
+.turn-group-no-thought {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.7rem;
+  background: rgba(148, 163, 184, 0.06);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.turn-group-no-thought-label {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-style: italic;
+  font-family: var(--font-mono);
+}
+
+/* ── Items list ──────────────────────────────────────────────────────────── */
+
+.turn-group-items {
+  padding: 0.15rem 0;
+}
+
+/* ── Individual item row ─────────────────────────────────────────────────── */
+
+.turn-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.7rem 0.22rem 2.1rem;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  min-height: 1.75rem;
+}
+
+.turn-item-row:hover {
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.turn-item-row--selected {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* Bullet dot — positioned over the connector line */
+.turn-item-dot {
+  position: absolute;
+  left: 0.825rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px white;
+}
+
+/* Spinner for pending tool calls */
+.turn-item-spinner {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.65rem;
+  height: 0.65rem;
+  color: #94a3b8;
+  animation: turnItemSpin 1s linear infinite;
+}
+
+@keyframes turnItemSpin {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to   { transform: translateY(-50%) rotate(360deg); }
+}
+
+/* Item content area */
+.turn-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+/* Compact badge in item rows */
+.turn-item-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.38rem;
+  border-radius: 9999px;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Tool name chip in item rows */
+.turn-item-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.08rem 0.38rem;
+  border-radius: 0.3rem;
+  background: rgba(15, 23, 42, 0.07);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #1e293b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Argument value preview */
+.turn-item-value {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 30ch;
+  flex-shrink: 1;
+}
+
+/* Narrative message in item rows */
+.turn-item-message {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Timestamp on the right of item rows */
+.turn-item-time {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Result indicator (✓ green dot on the right when tool call is complete) */
+.turn-item-result-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: #10b981;
+  flex-shrink: 0;
+  margin-right: 0.1rem;
+}
+
+.turn-item-result-error-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: #ef4444;
+  flex-shrink: 0;
+  margin-right: 0.1rem;
+}

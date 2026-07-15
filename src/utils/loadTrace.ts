@@ -15,6 +15,8 @@
 import type {
   AgentProgressEvent,
   AgentProgressPayload,
+  AgentToolResultEvent,
+  AgentToolResultPayload,
   EventTypeValue,
   GenericEvent,
   GenericEventType,
@@ -61,8 +63,23 @@ function requireObject(value: unknown, field: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/**
+ * Extract the top-level `turn_index` and `tool_call_id` fields from a raw
+ * event root object.  These are event-level fields (not inside `payload`).
+ */
+function extractEventExtras(obj: Record<string, unknown>): {
+  turn_index?: number;
+  tool_call_id?: string;
+} {
+  return {
+    turn_index:   typeof obj["turn_index"]   === "number" ? obj["turn_index"]   : undefined,
+    tool_call_id: typeof obj["tool_call_id"] === "string" ? obj["tool_call_id"] : undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Per-type payload parsers
+// Per-type payload parsers  (no longer extract turn_index / tool_call_id —
+// those live on the event root and are applied in parseTraceEvent below)
 // ---------------------------------------------------------------------------
 
 function parseRunStartedPayload(raw: Record<string, unknown>): RunStartedPayload {
@@ -137,11 +154,36 @@ function parseAgentProgressPayload(raw: Record<string, unknown>): AgentProgressP
   };
 }
 
-function parseGenericPayload(raw: Record<string, unknown>): { message: string; partial: unknown; data: Record<string, unknown> | null } {
+function parseAgentToolResultPayload(raw: Record<string, unknown>): AgentToolResultPayload {
   const rawData = raw["data"];
-  const data = rawData !== null && rawData !== undefined
-    ? requireObject(rawData, "payload.data")
-    : null;
+  let tool = "";
+  let result: string | null = null;
+  let is_error: boolean | undefined;
+
+  if (rawData !== null && rawData !== undefined) {
+    const d = requireObject(rawData, "payload.data");
+    tool   = typeof d["tool"]   === "string" ? d["tool"] : "";
+    result = typeof d["result"] === "string" ? d["result"] : null;
+    if (typeof d["is_error"] === "boolean") is_error = d["is_error"];
+  }
+
+  return {
+    message: requireString(raw["message"], "payload.message"),
+    partial: raw["partial"] ?? null,
+    data: { tool, result, ...(is_error !== undefined ? { is_error } : {}) },
+  };
+}
+
+function parseGenericPayload(raw: Record<string, unknown>): {
+  message: string;
+  partial: unknown;
+  data: Record<string, unknown> | null;
+} {
+  const rawData = raw["data"];
+  const data =
+    rawData !== null && rawData !== undefined
+      ? requireObject(rawData, "payload.data")
+      : null;
 
   return {
     message: requireString(raw["message"], "payload.message"),
@@ -164,12 +206,14 @@ export function parseTraceEvent(raw: unknown): TraceEvent {
   const obj = requireObject(raw, "<event root>");
 
   const run_id = requireString(obj["run_id"], "run_id");
-  const seq = requireNumber(obj["seq"], "seq");
-  const ts = requireNumber(obj["ts"], "ts");
-  const type = requireString(obj["type"], "type");
+  const seq    = requireNumber(obj["seq"],    "seq");
+  const ts     = requireNumber(obj["ts"],     "ts");
+  const type   = requireString(obj["type"],   "type");
   const rawPayload = requireObject(obj["payload"], "payload");
 
-  const base = { run_id, seq, ts };
+  // turn_index and tool_call_id are top-level event fields.
+  const extras = extractEventExtras(obj);
+  const base = { run_id, seq, ts, ...extras };
 
   switch (type) {
     case EventType.RunStarted: {
@@ -216,6 +260,16 @@ export function parseTraceEvent(raw: unknown): TraceEvent {
         type: EventType.AgentProgress,
         agent_id: requireString(obj["agent_id"], "agent_id"),
         payload: parseAgentProgressPayload(rawPayload),
+      };
+      return event;
+    }
+
+    case EventType.AgentToolResult: {
+      const event: AgentToolResultEvent = {
+        ...base,
+        type: EventType.AgentToolResult,
+        agent_id: requireString(obj["agent_id"], "agent_id"),
+        payload: parseAgentToolResultPayload(rawPayload),
       };
       return event;
     }
@@ -285,11 +339,11 @@ export function extractTimeRange(events: TraceEvent[]): TimeRange {
   }
 
   let startMs = Infinity;
-  let endMs = -Infinity;
+  let endMs   = -Infinity;
 
   for (const event of events) {
     if (event.ts < startMs) startMs = event.ts;
-    if (event.ts > endMs) endMs = event.ts;
+    if (event.ts > endMs)   endMs   = event.ts;
   }
 
   return {
@@ -328,7 +382,9 @@ export function parseTraceJson(jsonText: string): TraceEvent[] {
         try {
           return JSON.parse(line) as unknown;
         } catch {
-          throw new Error(`[loadTrace] Invalid JSON on JSONL line ${idx + 1}: ${line.slice(0, 80)}`);
+          throw new Error(
+            `[loadTrace] Invalid JSON on JSONL line ${idx + 1}: ${line.slice(0, 80)}`,
+          );
         }
       });
   }
@@ -378,17 +434,18 @@ export function parseResultsJson(jsonText: string): SubtaskResult[] {
 
     return {
       subtask_id: requireString(r["subtask_id"], `results[${idx}].subtask_id`),
-      task_id: requireString(r["task_id"], `results[${idx}].task_id`),
-      agent_id: requireString(r["agent_id"], `results[${idx}].agent_id`),
+      task_id:    requireString(r["task_id"],    `results[${idx}].task_id`),
+      agent_id:   requireString(r["agent_id"],   `results[${idx}].agent_id`),
       status: (r["status"] ?? "success") as SubtaskResult["status"],
       output: {
-        text: typeof output["text"] === "string" ? output["text"] : "",
+        text:
+          typeof output["text"] === "string" ? output["text"] : "",
         structured:
           typeof output["structured"] === "object" && output["structured"] !== null
             ? (output["structured"] as Record<string, unknown>)
             : {},
       },
-      error: typeof r["error"] === "string" ? r["error"] : null,
+      error:       typeof r["error"]       === "string" ? r["error"]       : null,
       tokens_used: typeof r["tokens_used"] === "number" ? r["tokens_used"] : 0,
       duration_ms: typeof r["duration_ms"] === "number" ? r["duration_ms"] : 0,
       // cost_usd is optional — only set when the backend includes it
@@ -416,8 +473,8 @@ export function loadTrace(eventsJson: string, resultsJson?: string): RunTrace {
   assert(run_id !== undefined && run_id.length > 0, "Could not determine run_id from events");
 
   const eventTypes = extractEventTypes(events);
-  const timeRange = extractTimeRange(events);
-  const results = resultsJson !== undefined ? parseResultsJson(resultsJson) : [];
+  const timeRange  = extractTimeRange(events);
+  const results    = resultsJson !== undefined ? parseResultsJson(resultsJson) : [];
 
   return {
     run_id,

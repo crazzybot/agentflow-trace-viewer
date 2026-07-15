@@ -1,27 +1,30 @@
 /**
- * TimelineView — scrollable list of filtered trace events.
+ * TimelineView — scrollable list of trace events grouped by LLM turn.
  *
- * Each card shows two visual layers:
+ * Layout overview
+ * ---------------
+ * Events that carry a `turn_index` in their payload are collected into
+ * TurnGroupCards. Each card shows:
  *
- *   ┌─────────────────────────────────────────────────────────────────────┐
- *   │ ● #seq  │ 12:34:56.789  +0.12s  │  [Badge]  agent-chip  │  ›      │
- *   ├─────────────────────────────────────────────────────────────────────┤
- *   │  ⌘  [tool-chip]  label:  monospace value…                          │
- *   └─────────────────────────────────────────────────────────────────────┘
+ *   ┌── thought caption (clickable) ───────────────────────────────────┐
+ *   │  🧠  [thought text...]                                  +0.5s   │
+ *   ├──────────────────────────────────────────────────────────────────┤
+ *   │  │ ●  bash_exec  cmd: echo hello                        +0.6s   │
+ *   │  │ ⟳  file_read  path: /foo/bar              [pending]          │
+ *   └──────────────────────────────────────────────────────────────────┘
  *
- * The bottom strip carries the structured payload summary:
- *  - tool invocations → tool name chip + arg label + monospace value
- *  - plan events      → subtask count pill
- *  - dispatch events  → subtask → task routing arrows
- *  - narrative text   → italicised message
+ * Events without a `turn_index` (run-level events, task events, etc.) are
+ * rendered as the existing flat TimelineRow cards.
  *
  * Props
  * -----
- * - `events`          — filtered, ordered TraceEvent array to render.
- * - `startMs`         — epoch ms of the first event in the *full* trace.
- * - `selectedEvent`   — currently selected event (or null).
- * - `onSelectEvent`   — called when the user clicks / keys-activates a row.
- * - `emptyMessage`    — optional override for the no-events message.
+ * - `events`     — filtered, ordered TraceEvent array to render.
+ * - `allEvents`  — full (unfiltered) event list used to resolve tool results.
+ * - `startMs`    — epoch ms of the first event in the *full* trace.
+ * - `selectedEvent`  — currently selected event (or null).
+ * - `onSelectEvent`  — called when the user clicks a row.
+ * - `emptyMessage`   — optional override for the no-events message.
+ * - `scrollToEnd`    — when true, auto-scrolls to the bottom (live mode).
  */
 
 import React from "react";
@@ -45,15 +48,19 @@ import {
   FileText,
   Globe,
   Layers,
+  Loader2,
 } from "lucide-react";
 import type { TraceEvent } from "../types/events";
+import { EventType } from "../types/events";
 import {
   EVENT_META,
   formatTimestamp,
   formatElapsed,
   payloadSummaryStructured,
+  groupEventsByTurn,
+  buildToolResultMap,
 } from "./timelineUtils";
-import type { RowSummary } from "./timelineUtils";
+import type { RowSummary, TurnGroup } from "./timelineUtils";
 
 // ---------------------------------------------------------------------------
 // Icon map — translates EventMeta.icon string → Lucide component
@@ -93,10 +100,9 @@ function AgentChip({ agentId }: { agentId: string | null }) {
 }
 
 // ---------------------------------------------------------------------------
-// Structured summary strip
+// Structured summary strip (used inside flat TimelineRow cards)
 // ---------------------------------------------------------------------------
 
-/** Pick a contextual icon for the summary strip based on the tool name. */
 function toolIcon(tool: string): React.ReactNode {
   if (/bash|shell|exec|command|run/.test(tool))
     return <Terminal className="timeline-summary-icon" aria-hidden="true" />;
@@ -126,10 +132,6 @@ function summaryTooltip(summary: RowSummary): string {
   }
 }
 
-/**
- * Renders the bottom summary strip of a TimelineRow card.
- * Each `RowSummary` variant gets its own structured layout.
- */
 function SummaryStrip({ summary, metaSummaryBg, metaIconColor }: {
   summary: RowSummary;
   metaSummaryBg: string;
@@ -137,7 +139,6 @@ function SummaryStrip({ summary, metaSummaryBg, metaIconColor }: {
 }) {
   if (summary.kind === "tool") {
     const { tool, argLabel, argValue, purpose } = summary;
-    // Truncate long values to keep rows compact; full value is in the title
     const displayValue = argValue
       ? argValue.length > 72
         ? argValue.slice(0, 72) + "…"
@@ -221,7 +222,7 @@ function SummaryStrip({ summary, metaSummaryBg, metaIconColor }: {
 }
 
 // ---------------------------------------------------------------------------
-// Individual row — memoised so only changed rows re-render
+// Flat TimelineRow — unchanged from the original, used for standalone events
 // ---------------------------------------------------------------------------
 
 interface RowProps {
@@ -315,11 +316,208 @@ const TimelineRow = React.memo(function TimelineRow({
 });
 
 // ---------------------------------------------------------------------------
+// Compact item row inside a TurnGroupCard
+// ---------------------------------------------------------------------------
+
+/** Compact inline summary for an item inside a turn group. */
+function TurnItemContent({ event }: { event: TraceEvent }) {
+  const meta = EVENT_META[event.type];
+  const summary = payloadSummaryStructured(event);
+
+  if (summary.kind === "tool") {
+    const displayValue = summary.argValue
+      ? summary.argValue.length > 40
+        ? summary.argValue.slice(0, 40) + "…"
+        : summary.argValue
+      : null;
+    return (
+      <>
+        <span className={`turn-item-badge ${meta.badge}`}>{meta.label}</span>
+        <span className="turn-item-tool-chip">{summary.tool}</span>
+        {displayValue && (
+          <code className="turn-item-value">{displayValue}</code>
+        )}
+      </>
+    );
+  }
+
+  const text = summary.kind === "message" ? summary.text
+    : summary.kind === "plan" ? `${summary.count} subtasks planned`
+    : summary.kind === "dispatch" ? `${summary.subtaskId} → ${summary.taskIdShort}…`
+    : "";
+
+  return (
+    <>
+      <span className={`turn-item-badge ${meta.badge}`}>{meta.label}</span>
+      {text && <span className="turn-item-message">{text}</span>}
+    </>
+  );
+}
+
+interface TurnItemRowProps {
+  event: TraceEvent;
+  startMs: number;
+  isSelected: boolean;
+  isPending: boolean;
+  hasResult: boolean;
+  resultIsError: boolean;
+  onSelect: (event: TraceEvent) => void;
+}
+
+const TurnItemRow = React.memo(function TurnItemRow({
+  event,
+  startMs,
+  isSelected,
+  isPending,
+  hasResult,
+  resultIsError,
+  onSelect,
+}: TurnItemRowProps) {
+  const meta = EVENT_META[event.type];
+
+  return (
+    <div
+      role="option"
+      aria-selected={isSelected}
+      tabIndex={0}
+      className={[
+        "turn-item-row",
+        isSelected ? "turn-item-row--selected" : "",
+      ].join(" ")}
+      onClick={() => onSelect(event)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(event);
+        }
+      }}
+      title={`#${event.seq} ${meta.label}`}
+    >
+      {/* Bullet dot or spinner */}
+      {isPending ? (
+        <Loader2 className="turn-item-spinner" aria-hidden="true" />
+      ) : (
+        <span className={`turn-item-dot ${meta.dot}`} aria-hidden="true" />
+      )}
+
+      {/* Item content */}
+      <div className="turn-item-content">
+        <TurnItemContent event={event} />
+      </div>
+
+      {/* Result status indicator */}
+      {hasResult && !isPending && (
+        resultIsError
+          ? <span className="turn-item-result-error-dot" title="Tool returned an error" aria-hidden="true" />
+          : <span className="turn-item-result-dot" title="Tool completed successfully" aria-hidden="true" />
+      )}
+
+      {/* Timestamp */}
+      <span className="turn-item-time">{formatElapsed(event.ts, startMs)}</span>
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Turn group card
+// ---------------------------------------------------------------------------
+
+interface TurnGroupCardProps {
+  group: Extract<TurnGroup, { kind: "turn" }>;
+  startMs: number;
+  selectedEvent: TraceEvent | null;
+  onSelectEvent: (event: TraceEvent) => void;
+  toolResultMap: Map<string, TraceEvent>;
+}
+
+const TurnGroupCard = React.memo(function TurnGroupCard({
+  group,
+  startMs,
+  selectedEvent,
+  onSelectEvent,
+  toolResultMap,
+}: TurnGroupCardProps) {
+  const { thought, items } = group;
+
+  // Is any event in this group currently selected?
+  const hasSelected =
+    (thought != null && selectedEvent?.seq === thought.seq) ||
+    items.some((e) => selectedEvent?.seq === e.seq);
+
+  const thoughtSelected = thought != null && selectedEvent?.seq === thought.seq;
+
+  return (
+    <div
+      className={[
+        "turn-group-card",
+        hasSelected ? "turn-group-card--has-selected" : "",
+      ].join(" ")}
+    >
+      {/* ── Thought caption ────────────────────────────────────────────── */}
+      {thought ? (
+        <button
+          type="button"
+          className={[
+            "turn-group-thought",
+            thoughtSelected ? "turn-group-thought--selected" : "",
+          ].join(" ")}
+          onClick={() => onSelectEvent(thought)}
+          aria-selected={thoughtSelected}
+          title={thought.payload.message}
+        >
+          <Brain className="turn-group-thought-icon" aria-hidden="true" />
+          <span className="turn-group-thought-text">{thought.payload.message}</span>
+          <span className="turn-group-thought-time">{formatElapsed(thought.ts, startMs)}</span>
+        </button>
+      ) : (
+        <div className="turn-group-no-thought">
+          <span className="turn-group-no-thought-label">
+            turn {group.turn_index}{group.agent_id ? ` · ${group.agent_id}` : ""}
+          </span>
+        </div>
+      )}
+
+      {/* ── Items list ─────────────────────────────────────────────────── */}
+      {items.length > 0 && (
+        <div className="turn-group-items">
+          {items.map((event) => {
+            const toolCallId = event.tool_call_id;
+            const toolResult = toolCallId ? toolResultMap.get(toolCallId) : undefined;
+            const isPending = toolCallId != null && toolResult == null;
+            const hasResult = toolResult != null;
+            const resultIsError =
+              hasResult &&
+              toolResult != null &&
+              toolResult.type === EventType.AgentToolResult &&
+              toolResult.payload.data.is_error === true;
+
+            return (
+              <TurnItemRow
+                key={event.seq}
+                event={event}
+                startMs={startMs}
+                isSelected={selectedEvent?.seq === event.seq}
+                isPending={isPending}
+                hasResult={hasResult}
+                resultIsError={resultIsError}
+                onSelect={onSelectEvent}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
 // TimelineView
 // ---------------------------------------------------------------------------
 
 export interface TimelineViewProps {
   events: TraceEvent[];
+  /** Full (unfiltered) event list — used to resolve tool results. */
+  allEvents?: TraceEvent[];
   startMs: number;
   selectedEvent: TraceEvent | null;
   onSelectEvent: (event: TraceEvent) => void;
@@ -330,6 +528,7 @@ export interface TimelineViewProps {
 
 export function TimelineView({
   events,
+  allEvents,
   startMs,
   selectedEvent,
   onSelectEvent,
@@ -338,6 +537,30 @@ export function TimelineView({
 }: TimelineViewProps) {
   const listRef = React.useRef<HTMLDivElement>(null);
   const bottomRef = React.useRef<HTMLDivElement>(null);
+
+  // Build the tool-result map from the full event list so pending state is
+  // correct even when agent:tool_result events are filtered out.
+  const toolResultMap = React.useMemo(
+    () => buildToolResultMap(allEvents ?? events),
+    [allEvents, events],
+  );
+
+  // Group the filtered events into turn groups.
+  const groups = React.useMemo(() => groupEventsByTurn(events), [events]);
+
+  // Flat list of all selectable events in display order, used for keyboard nav.
+  const selectableEvents = React.useMemo<TraceEvent[]>(() => {
+    const result: TraceEvent[] = [];
+    for (const group of groups) {
+      if (group.kind === "standalone") {
+        result.push(group.event);
+      } else {
+        if (group.thought) result.push(group.thought);
+        result.push(...group.items);
+      }
+    }
+    return result;
+  }, [groups]);
 
   // Scroll selected row into view when selection changes.
   React.useEffect(() => {
@@ -348,24 +571,23 @@ export function TimelineView({
 
   function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-    if (events.length === 0) return;
+    if (selectableEvents.length === 0) return;
     e.preventDefault();
 
     const currentIndex = selectedEvent
-      ? events.findIndex((ev) => ev.seq === selectedEvent.seq)
+      ? selectableEvents.findIndex((ev) => ev.seq === selectedEvent.seq)
       : -1;
 
     let nextIndex: number;
     if (e.key === "ArrowDown") {
-      nextIndex = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, events.length - 1);
+      nextIndex = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, selectableEvents.length - 1);
     } else {
-      nextIndex = currentIndex === -1 ? events.length - 1 : Math.max(currentIndex - 1, 0);
+      nextIndex = currentIndex === -1 ? selectableEvents.length - 1 : Math.max(currentIndex - 1, 0);
     }
 
     if (nextIndex === currentIndex) return;
-    onSelectEvent(events[nextIndex]);
+    onSelectEvent(selectableEvents[nextIndex]);
 
-    // Move DOM focus to the new row; the useEffect above handles smooth scroll.
     const rows = listRef.current?.querySelectorAll<HTMLElement>('[role="option"]');
     rows?.[nextIndex]?.focus({ preventScroll: true });
   }
@@ -393,15 +615,32 @@ export function TimelineView({
       className="timeline-list"
       onKeyDown={handleListKeyDown}
     >
-      {events.map((event) => (
-        <TimelineRow
-          key={`${event.run_id}-${event.seq}`}
-          event={event}
-          startMs={startMs}
-          isSelected={selectedEvent?.seq === event.seq}
-          onSelect={onSelectEvent}
-        />
-      ))}
+      {groups.map((group, i) => {
+        if (group.kind === "standalone") {
+          return (
+            <TimelineRow
+              key={`${group.event.run_id}-${group.event.seq}`}
+              event={group.event}
+              startMs={startMs}
+              isSelected={selectedEvent?.seq === group.event.seq}
+              onSelect={onSelectEvent}
+            />
+          );
+        }
+
+        // Turn group
+        const groupKey = `turn-${group.agent_id ?? ""}-${group.turn_index}-${i}`;
+        return (
+          <TurnGroupCard
+            key={groupKey}
+            group={group}
+            startMs={startMs}
+            selectedEvent={selectedEvent}
+            onSelectEvent={onSelectEvent}
+            toolResultMap={toolResultMap}
+          />
+        );
+      })}
       {scrollToEnd && <div ref={bottomRef} aria-hidden="true" />}
     </div>
   );

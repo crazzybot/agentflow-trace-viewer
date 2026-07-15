@@ -92,6 +92,16 @@ export const EVENT_META: Record<EventTypeValue, EventMeta> = {
     iconColor: "text-sky-400",
     summaryBg: "bg-sky-50 border-sky-100",
   },
+  [EventType.AgentToolResult]: {
+    label:     "Tool Result",
+    border:    "border-l-teal-500",
+    dot:       "bg-teal-500 ring-teal-300",
+    badge:     "bg-teal-900/60 text-teal-300 ring-1 ring-teal-500/40",
+    rowHover:  "hover:bg-teal-950/30",
+    icon:      "CircleCheck",
+    iconColor: "text-teal-400",
+    summaryBg: "bg-teal-50 border-teal-100",
+  },
   [EventType.TaskComplete]: {
     label:     "Task Complete",
     border:    "border-l-emerald-600",
@@ -181,6 +191,16 @@ export const EVENT_META: Record<EventTypeValue, EventMeta> = {
     icon:      "Ban",
     iconColor: "text-slate-400",
     summaryBg: "bg-slate-50 border-slate-100",
+  },
+  [EventType.RunMessageReceived]: {
+    label:     "Message Received",
+    border:    "border-l-indigo-500",
+    dot:       "bg-indigo-500 ring-indigo-300",
+    badge:     "bg-indigo-900/60 text-indigo-300 ring-1 ring-indigo-500/40",
+    rowHover:  "hover:bg-indigo-950/30",
+    icon:      "MessageSquare",
+    iconColor: "text-indigo-400",
+    summaryBg: "bg-indigo-50 border-indigo-100",
   },
 };
 
@@ -308,6 +328,9 @@ export function payloadSummaryStructured(event: TraceEvent): RowSummary {
       return { kind: "tool", tool, argLabel: undefined, argValue: hint, purpose };
     }
 
+    case EventType.AgentToolResult:
+      return { kind: "message", text: event.payload.message };
+
     default:
       return { kind: "message", text: event.payload.message };
   }
@@ -354,4 +377,90 @@ export function formatElapsed(ts: number, startMs: number): string {
   const delta = ts - startMs;
   if (delta < 1000) return `+${delta}ms`;
   return `+${(delta / 1000).toFixed(2)}s`;
+}
+
+// ---------------------------------------------------------------------------
+// Turn-group helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * A turn group collects all agent events that share the same `(agent_id,
+ * turn_index)` pair.  Events without a `turn_index` become standalone groups.
+ */
+export type TurnGroup =
+  | { kind: "standalone"; event: TraceEvent }
+  | {
+      kind: "turn";
+      turn_index: number;
+      agent_id: string | null;
+      thought: TraceEvent | null;
+      items: TraceEvent[];
+    };
+
+/**
+ * Groups a flat, ordered list of events into `TurnGroup[]`.
+ *
+ * - Events with a `turn_index` in their payload are collected into turn groups.
+ * - `agent:tool_result` events are excluded from visible items (they provide
+ *   context for their linked tool-call event via `tool_call_id` but are not
+ *   rendered as separate rows).
+ * - `agent:thought` becomes the group's caption; all other events become items.
+ * - Events without a `turn_index` remain as standalone rows.
+ */
+export function groupEventsByTurn(events: TraceEvent[]): TurnGroup[] {
+  const groups: TurnGroup[] = [];
+  // Map key → group so events from the same turn that appear non-contiguously
+  // still collapse into one group (rare in practice but safe).
+  const openGroups = new Map<string, Extract<TurnGroup, { kind: "turn" }>>();
+
+  for (const event of events) {
+    // Tool results are hidden from display — they inform pending state only.
+    if (event.type === EventType.AgentToolResult) continue;
+
+    const turnIndex = event.turn_index;
+    const agentId = event.agent_id;
+
+    if (turnIndex == null) {
+      groups.push({ kind: "standalone", event });
+      continue;
+    }
+
+    const key = `${agentId ?? ""}:${turnIndex}`;
+    let group = openGroups.get(key);
+
+    if (!group) {
+      group = {
+        kind: "turn",
+        turn_index: turnIndex,
+        agent_id: agentId,
+        thought: null,
+        items: [],
+      };
+      openGroups.set(key, group);
+      groups.push(group);
+    }
+
+    if (event.type === EventType.AgentThought) {
+      group.thought = event;
+    } else {
+      group.items.push(event);
+    }
+  }
+
+  return groups;
+}
+
+/**
+ * Build a lookup map from `tool_call_id` → tool-result event.
+ * Used to determine whether a tool call is still pending.
+ */
+export function buildToolResultMap(allEvents: TraceEvent[]): Map<string, TraceEvent> {
+  const map = new Map<string, TraceEvent>();
+  for (const event of allEvents) {
+    if (event.type === EventType.AgentToolResult) {
+      const id = event.tool_call_id;
+      if (id) map.set(id, event);
+    }
+  }
+  return map;
 }

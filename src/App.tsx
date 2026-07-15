@@ -173,6 +173,11 @@ export default function App() {
   // Tracks seq numbers already in streamingEventsRef to deduplicate SSE events
   // when re-joining a stream that replays events we already fetched.
   const seenSeqsRef = React.useRef<Set<number>>(new Set());
+  // Incremented after HITL approval to force the SSE effect to reconnect.
+  // The backend may close the SSE connection while waiting for human input;
+  // bumping this causes the effect to open a fresh EventSource so events
+  // that arrive after approval are captured. seenSeqsRef deduplicates any replay.
+  const [sseVersion, setSseVersion] = React.useState(0);
 
   // Track whether we triggered a load from the current route so we don't
   // re-trigger it after the resulting state change causes a re-render.
@@ -385,6 +390,8 @@ export default function App() {
 
     // streamingEventsRef and seenSeqsRef are pre-populated by callers before
     // entering streaming state (handleRunLoad for resume, handleNewRunSubmit for new).
+    // sseVersion is bumped after HITL approval to force reconnection when the
+    // backend closes the SSE connection while waiting for human input.
     const es = openRunStream(activeRunId);
     let terminated = false;
 
@@ -479,7 +486,7 @@ export default function App() {
     return () => {
       es.close();
     };
-  }, [activeRunId]);
+  }, [activeRunId, sseVersion]);
 
   // ── Reset ─────────────────────────────────────────────────────────────────
 
@@ -774,11 +781,12 @@ export default function App() {
             <HumanInputPanel
               runId={runId}
               awaiting={awaiting}
-              onDone={() =>
+              onDone={() => {
                 setAppState((prev) =>
                   prev.status === "streaming" ? { ...prev, awaiting: null } : prev
-                )
-              }
+                );
+                setSseVersion((v) => v + 1);
+              }}
             />
           ) : (
             <StreamingControlBar runId={runId} />
@@ -790,6 +798,7 @@ export default function App() {
             <div className="timeline-container">
               <TimelineView
                 events={events}
+                allEvents={events}
                 startMs={startMs}
                 selectedEvent={selectedEvent}
                 onSelectEvent={setSelectedEvent}
@@ -798,7 +807,7 @@ export default function App() {
               />
             </div>
             {selectedEvent && (
-              <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+              <EventDetail event={selectedEvent} allEvents={events} onClose={() => setSelectedEvent(null)} />
             )}
           </div>
         </div>
@@ -967,13 +976,14 @@ export default function App() {
             <div className="timeline-container">
               <TimelineView
                 events={filteredEvents}
+                allEvents={trace.events}
                 startMs={trace.timeRange.startMs}
                 selectedEvent={selectedEvent}
                 onSelectEvent={setSelectedEvent}
               />
             </div>
             {selectedEvent && (
-              <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+              <EventDetail event={selectedEvent} allEvents={trace.events} onClose={() => setSelectedEvent(null)} />
             )}
           </div>
         )}
