@@ -4,13 +4,16 @@ import {
   DollarSign,
   FileJson2,
   PlusCircle,
+  RotateCcw,
   Server,
+  Target,
   AlertCircle,
   X as XIcon,
 } from "lucide-react";
 import type { EventTypeValue, RunTrace, TraceEvent } from "./types/events";
 import type { RunInfo } from "./types/runs";
-import { loadTrace, parseTraceEvent, parseTraceJson, extractEventTypes, extractTimeRange } from "./utils/loadTrace";
+import { loadTrace, parseTraceEvent, parseTraceJson, extractEventTypes, extractTimeRange, sortEvents, eventKey } from "./utils/loadTrace";
+import { traceFromSession, sessionStatus } from "./utils/sessionTrace";
 import {
   fetchRunEventsText,
   fetchRunResultsText,
@@ -19,6 +22,8 @@ import {
   openRunStream,
   createRun,
   createFollowupRun,
+  fetchRunSession,
+  resumeRun,
 } from "./api/agentflow";
 import { computeResultsCost, computeEventsCost } from "./utils/cost";
 import { ArtifactsViewer } from "./components/ArtifactsViewer";
@@ -33,6 +38,8 @@ import { ReportViewer } from "./components/ReportViewer";
 import { HumanInputPanel } from "./components/HumanInputPanel";
 import type { AwaitingInputData } from "./components/HumanInputPanel";
 import { StreamingControlBar } from "./components/StreamingControlBar";
+import { CheckpointsViewer } from "./components/CheckpointsViewer";
+import { CampaignsPage } from "./components/CampaignsPage";
 import "./App.css";
 
 // ---------------------------------------------------------------------------
@@ -49,11 +56,14 @@ import "./App.css";
  *  '#/runs/:id'       → { page: 'run', runId: id }
  *  '#/runs/:id/followup' → { page: 'followup', runId: id }
  */
-type Route =
+export type Route =
   | { page: "idle" }
   | { page: "new-run" }
   | { page: "run"; runId: string }
-  | { page: "followup"; runId: string };
+  | { page: "followup"; runId: string }
+  | { page: "campaigns" }
+  | { page: "new-campaign" }
+  | { page: "campaign"; campaignId: string };
 
 function parseHash(hash: string): Route {
   // Strip leading '#' if present, then normalise the path.
@@ -63,6 +73,14 @@ function parseHash(hash: string): Route {
 
   const runsNewRe = /^\/runs\/new\/?$/;
   if (runsNewRe.test(path)) return { page: "new-run" };
+
+  if (/^\/campaigns\/?$/.test(path)) return { page: "campaigns" };
+  if (/^\/campaigns\/new\/?$/.test(path)) return { page: "new-campaign" };
+  const campaignMatch = /^\/campaigns\/([^/]+)\/?$/.exec(path);
+  if (campaignMatch) {
+    const campaignId = decodeURIComponent(campaignMatch[1] ?? "");
+    return campaignId ? { page: "campaign", campaignId } : { page: "campaigns" };
+  }
 
   const followupRe = /^\/runs\/([^/]+)\/followup\/?$/;
   const followupMatch = followupRe.exec(path);
@@ -105,7 +123,18 @@ function useHashRouter() {
 
 type TraceSource =
   | { type: "file"; fileName: string }
-  | { type: "api"; runId: string; name?: string | null; task?: string | null; has_report?: boolean; has_artifacts?: boolean };
+  | {
+      type: "api";
+      runId: string;
+      name?: string | null;
+      task?: string | null;
+      has_report?: boolean;
+      has_artifacts?: boolean;
+      has_session?: boolean;
+      workspace?: string | null;
+      /** Interrupted by a restart and resumable (from the session log). */
+      resumable?: boolean;
+    };
 
 type AppState =
   | { status: "idle" }
@@ -113,7 +142,7 @@ type AppState =
   | { status: "new-run"; submitError: string | null; isSubmitting: boolean }
   | { status: "followup"; priorRunId: string; priorName?: string | null; priorTask?: string | null; submitError: string | null; isSubmitting: boolean }
   | { status: "streaming"; runId: string; events: TraceEvent[]; task?: string | null; awaiting: AwaitingInputData | null }
-  | { status: "loaded"; trace: RunTrace; source: TraceSource; view: "events" | "report" | "artifacts"; report: string | null; reportLoading: boolean }
+  | { status: "loaded"; trace: RunTrace; source: TraceSource; view: "events" | "report" | "artifacts" | "checkpoints"; report: string | null; reportLoading: boolean; resumeError?: string | null; resuming?: boolean }
   | { status: "error"; message: string };
 
 const TERMINAL_EVENT_TYPES = new Set(["run:complete", "run:error", "run:budget_exceeded", "run:cancelled"]);
@@ -145,7 +174,7 @@ function buildTrace(runId: string, events: TraceEvent[]): RunTrace {
       results: [],
     };
   }
-  const sorted = [...events].sort((a, b) => a.seq - b.seq);
+  const sorted = sortEvents(events);
   return {
     run_id: runId,
     events: sorted,
@@ -170,13 +199,14 @@ export default function App() {
   // Accumulates SSE events outside of React state so we can read the full
   // list synchronously inside the onmessage handler when a terminal event arrives.
   const streamingEventsRef = React.useRef<TraceEvent[]>([]);
-  // Tracks seq numbers already in streamingEventsRef to deduplicate SSE events
-  // when re-joining a stream that replays events we already fetched.
-  const seenSeqsRef = React.useRef<Set<number>>(new Set());
+  // Identities (eventKey) of events already in streamingEventsRef, to drop SSE
+  // replays of events we already have. Not seq alone: workers number their own
+  // events and a resumed run's new stream restarts at 1.
+  const seenKeysRef = React.useRef<Set<string>>(new Set());
   // Incremented after HITL approval to force the SSE effect to reconnect.
   // The backend may close the SSE connection while waiting for human input;
   // bumping this causes the effect to open a fresh EventSource so events
-  // that arrive after approval are captured. seenSeqsRef deduplicates any replay.
+  // that arrive after approval are captured. seenKeysRef deduplicates any replay.
   const [sseVersion, setSseVersion] = React.useState(0);
 
   // Track whether we triggered a load from the current route so we don't
@@ -271,25 +301,48 @@ export default function App() {
       }
 
       streamingEventsRef.current = existingEvents;
-      seenSeqsRef.current = new Set(existingEvents.map((e) => e.seq));
+      seenKeysRef.current = new Set(existingEvents.map(eventKey));
       setAppState({ status: "streaming", runId: run.run_id, events: existingEvents, task: run.task, awaiting: initialAwaiting });
       navigate(`#/runs/${encodeURIComponent(run.run_id)}`);
       return;
     }
 
     try {
-      const eventsText = await fetchRunEventsText(run.run_id);
-      let resultsText: string | undefined;
-      if (run.has_results) {
-        try { resultsText = await fetchRunResultsText(run.run_id); } catch { /* optional */ }
+      // The session log exists for every run; events.jsonl only with CAPTURE_EVENTS.
+      // Prefer the captured SSE events when present (exactly what clients saw), and
+      // fall back to rebuilding the trace from the session log.
+      const session = run.has_session ? await fetchRunSession(run.run_id).catch(() => null) : null;
+      let trace: RunTrace;
+      if (run.has_events) {
+        const eventsText = await fetchRunEventsText(run.run_id);
+        let resultsText: string | undefined;
+        if (run.has_results) {
+          try { resultsText = await fetchRunResultsText(run.run_id); } catch { /* optional */ }
+        }
+        trace = { ...loadTrace(eventsText, resultsText), origin: "events" };
+        if (session) {
+          const fromSession = traceFromSession(run.run_id, session);
+          trace.totalCostUsd = fromSession.totalCostUsd;
+          if (trace.results.length === 0) trace.results = fromSession.results;
+        }
+      } else if (session) {
+        trace = traceFromSession(run.run_id, session);
+      } else {
+        throw new Error(
+          "This run has neither captured events nor a session log. " +
+            "It predates session logs and the server did not run with CAPTURE_EVENTS.",
+        );
       }
-      enterLoaded(loadTrace(eventsText, resultsText), {
+      enterLoaded(trace, {
         type: "api",
         runId: run.run_id,
         name: run.name,
         task: run.task,
         has_report: run.has_report,
         has_artifacts: run.has_artifacts,
+        has_session: run.has_session,
+        workspace: run.workspace,
+        resumable: session ? sessionStatus(session) === "interrupted" : false,
       });
       navigate(`#/runs/${encodeURIComponent(run.run_id)}`);
     } catch (err) {
@@ -329,12 +382,12 @@ export default function App() {
     setAppState({ status: "new-run", submitError: null, isSubmitting: false });
   }
 
-  async function handleNewRunSubmit(task: string, budgetUsd: number | undefined) {
+  async function handleNewRunSubmit(task: string, budgetUsd: number | undefined, workspace?: string) {
     setAppState({ status: "new-run", submitError: null, isSubmitting: true });
     try {
-      const { run_id } = await createRun({ task, budget_usd: budgetUsd });
+      const { run_id } = await createRun({ task, budget_usd: budgetUsd, ...(workspace ? { workspace } : {}) });
       streamingEventsRef.current = [];
-      seenSeqsRef.current = new Set();
+      seenKeysRef.current = new Set();
       setSelectedEvent(null);
       // Mark handled before state + navigation so the route-sync effect is a no-op.
       lastLoadedRouteRef.current = `run:${run_id}`;
@@ -362,14 +415,14 @@ export default function App() {
     });
   }
 
-  async function handleFollowupSubmit(task: string, budgetUsd: number | undefined) {
+  async function handleFollowupSubmit(task: string, budgetUsd: number | undefined, workspace?: string) {
     if (appState.status !== "followup") return;
     const { priorRunId } = appState;
     setAppState((prev) => prev.status === "followup" ? { ...prev, isSubmitting: true, submitError: null } : prev);
     try {
-      const { run_id } = await createFollowupRun(priorRunId, task, budgetUsd);
+      const { run_id } = await createFollowupRun(priorRunId, task, budgetUsd, workspace);
       streamingEventsRef.current = [];
-      seenSeqsRef.current = new Set();
+      seenKeysRef.current = new Set();
       setSelectedEvent(null);
       // Mark handled before navigation so the route-sync effect is a no-op.
       lastLoadedRouteRef.current = `run:${run_id}`;
@@ -388,7 +441,7 @@ export default function App() {
   React.useEffect(() => {
     if (!activeRunId) return;
 
-    // streamingEventsRef and seenSeqsRef are pre-populated by callers before
+    // streamingEventsRef and seenKeysRef are pre-populated by callers before
     // entering streaming state (handleRunLoad for resume, handleNewRunSubmit for new).
     // sseVersion is bumped after HITL approval to force reconnection when the
     // backend closes the SSE connection while waiting for human input.
@@ -404,8 +457,9 @@ export default function App() {
       }
 
       // Skip events already fetched from the historical endpoint (resume case).
-      if (seenSeqsRef.current.has(event.seq)) return;
-      seenSeqsRef.current.add(event.seq);
+      const key = eventKey(event);
+      if (seenKeysRef.current.has(key)) return;
+      seenKeysRef.current.add(key);
 
       // Accumulate in the ref so the full list is readable synchronously.
       streamingEventsRef.current = [...streamingEventsRef.current, event];
@@ -415,7 +469,7 @@ export default function App() {
       if (isTerminal) {
         // Build the complete trace and transition to "loaded", initialising
         // filter state in the same batch as the app-state update.
-        const trace = buildTrace(activeRunId, snapshot);
+        const trace: RunTrace = { ...buildTrace(activeRunId, snapshot), origin: "stream" };
         setSelectedTypes(new Set(trace.eventTypes));
         setSelectedTimeRange([0, trace.timeRange.durationMs]);
         setAppState((prev2) => {
@@ -458,7 +512,7 @@ export default function App() {
         if (snapshot.some((e) => TERMINAL_EVENT_TYPES.has(e.type))) {
           // Terminal event was already received (e.g. historical preload or
           // arrived via SSE before the connection dropped). Recover gracefully.
-          const trace = buildTrace(activeRunId, snapshot);
+          const trace: RunTrace = { ...buildTrace(activeRunId, snapshot), origin: "stream" };
           setSelectedTypes(new Set(trace.eventTypes));
           setSelectedTimeRange([0, trace.timeRange.durationMs]);
           setAppState((prev) => {
@@ -509,6 +563,12 @@ export default function App() {
 
   React.useEffect(() => {
     const { page } = route;
+
+    // ── campaign pages render on their own (see CampaignsPage) ────────────
+    if (page === "campaigns" || page === "new-campaign" || page === "campaign") {
+      lastLoadedRouteRef.current = "";
+      return;
+    }
 
     // ── idle route ────────────────────────────────────────────────────────
     if (page === "idle") {
@@ -624,6 +684,14 @@ export default function App() {
   }, [appState, selectedTypes, selectedTimeRange]);
 
   // ===========================================================================
+  // Render: campaigns (independent of the run state machine)
+  // ===========================================================================
+
+  if (route.page === "campaigns" || route.page === "new-campaign" || route.page === "campaign") {
+    return <CampaignsPage route={route} navigate={navigate} />;
+  }
+
+  // ===========================================================================
   // Render: idle / loading / error  →  hero with RunSelector + FileLoader
   // ===========================================================================
 
@@ -651,7 +719,13 @@ export default function App() {
 
         <div className="hero-panels">
           <div className="hero-panel-section">
-            <p className="hero-panel-heading">From agentflow service</p>
+            <div className="hero-panel-heading-row">
+              <p className="hero-panel-heading">From agentflow service</p>
+              <button type="button" className="hero-campaigns-link" onClick={() => navigate("#/campaigns")}>
+                <Target className="w-3.5 h-3.5" aria-hidden="true" />
+                Campaigns
+              </button>
+            </div>
             <RunSelector
               onSelectRun={handleRunLoad}
               onNewRun={handleNewRunOpen}
@@ -827,16 +901,37 @@ export default function App() {
 
   const hasReport = source.type === "api" && !!source.has_report;
   const hasArtifacts = source.type === "api" && !!source.has_artifacts;
-  const showTabs = hasReport || hasArtifacts;
+  const hasCheckpoints = source.type === "api" && !!source.has_session;
+  const showTabs = hasReport || hasArtifacts || hasCheckpoints;
 
-  // Compute total cost — prefer result records when available (more precise),
-  // fall back to scanning event payloads for cost data from task:complete events.
+  // Total cost: the session log's cost_added sum is exact (it includes retries,
+  // verification and repairs); otherwise result records, then event payloads.
   const totalCostUsd =
-    trace.results.length > 0
-      ? computeResultsCost(trace.results)
-      : computeEventsCost(trace.events);
+    trace.totalCostUsd !== undefined
+      ? trace.totalCostUsd
+      : trace.results.length > 0
+        ? computeResultsCost(trace.results)
+        : computeEventsCost(trace.events);
 
-  async function handleSwitchView(next: "events" | "report" | "artifacts") {
+  async function handleResume() {
+    if (source.type !== "api") return;
+    const runId = source.runId;
+    setAppState((prev) => prev.status === "loaded" ? { ...prev, resuming: true, resumeError: null } : prev);
+    try {
+      await resumeRun(runId);
+      // Keep what is already on screen; the resumed run's stream starts fresh and
+      // is merged in (eventKey de-duplicates any replay).
+      streamingEventsRef.current = trace.events;
+      seenKeysRef.current = new Set(trace.events.map(eventKey));
+      setSelectedEvent(null);
+      setAppState({ status: "streaming", runId, events: trace.events, task: source.task, awaiting: null });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAppState((prev) => prev.status === "loaded" ? { ...prev, resuming: false, resumeError: msg } : prev);
+    }
+  }
+
+  async function handleSwitchView(next: "events" | "report" | "artifacts" | "checkpoints") {
     if (next === "report" && source.type === "api" && !report) {
       setAppState((prev) =>
         prev.status === "loaded" ? { ...prev, view: "report", reportLoading: true } : prev,
@@ -884,6 +979,16 @@ export default function App() {
           <span className="app-topbar-eventcount">
             {trace.events.length} event{trace.events.length !== 1 ? "s" : ""}
           </span>
+          {trace.origin === "session" && (
+            <span className="app-topbar-origin" title="Rebuilt from the run's durable session log (the server did not capture SSE events for this run)">
+              from session log
+            </span>
+          )}
+          {source.type === "api" && source.workspace && (
+            <span className="app-topbar-workspace" title="Workspace this run worked in">
+              {source.workspace}
+            </span>
+          )}
           {totalCostUsd > 0 && (
             <span
               className="app-topbar-cost"
@@ -930,7 +1035,31 @@ export default function App() {
                 Artifacts
               </button>
             )}
+            {hasCheckpoints && (
+              <button
+                role="tab"
+                aria-selected={view === "checkpoints"}
+                type="button"
+                className={`app-topbar-tab ${view === "checkpoints" ? "app-topbar-tab--active" : ""}`}
+                onClick={() => handleSwitchView("checkpoints")}
+              >
+                Checkpoints
+              </button>
+            )}
           </div>
+        )}
+
+        {source.type === "api" && source.resumable && (
+          <button
+            type="button"
+            onClick={handleResume}
+            disabled={appState.resuming}
+            className="app-topbar-resume-btn"
+            title={appState.resumeError ?? "This run was interrupted by a restart. Resume it from where it stopped."}
+          >
+            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+            {appState.resuming ? "Resuming…" : appState.resumeError ? "Resume failed" : "Resume"}
+          </button>
         )}
 
         {source.type === "api" && (
@@ -992,6 +1121,9 @@ export default function App() {
         )}
         {view === "artifacts" && source.type === "api" && (
           <ArtifactsViewer runId={source.runId} />
+        )}
+        {view === "checkpoints" && source.type === "api" && (
+          <CheckpointsViewer runId={source.runId} workspace={source.workspace ?? null} />
         )}
       </div>
     </div>

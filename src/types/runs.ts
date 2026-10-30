@@ -14,4 +14,8 @@ export interface RunInfo {
   task?: string | null;
   /** ISO-8601 creation timestamp, if available. */
   created_at?: string | null;
+  /** True when the run has a durable session log (every run since Oct 2026). */
+  has_session?: boolean;
+  /** Workspace path relative to the workspace root ("runs/<id>" or a project name). */
+  workspace?: string | null;
 }

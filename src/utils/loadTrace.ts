@@ -70,10 +70,12 @@ function requireObject(value: unknown, field: string): Record<string, unknown> {
 function extractEventExtras(obj: Record<string, unknown>): {
   turn_index?: number;
   tool_call_id?: string;
+  invocation_id?: string;
 } {
   return {
-    turn_index:   typeof obj["turn_index"]   === "number" ? obj["turn_index"]   : undefined,
-    tool_call_id: typeof obj["tool_call_id"] === "string" ? obj["tool_call_id"] : undefined,
+    turn_index:    typeof obj["turn_index"]    === "number" ? obj["turn_index"]    : undefined,
+    tool_call_id:  typeof obj["tool_call_id"]  === "string" ? obj["tool_call_id"]  : undefined,
+    invocation_id: typeof obj["invocation_id"] === "string" ? obj["invocation_id"] : undefined,
   };
 }
 
@@ -97,6 +99,9 @@ function parsePlanCreatedPayload(raw: Record<string, unknown>): PlanCreatedPaylo
   assert(Array.isArray(data["subtasks"]), 'payload.data.subtasks must be an array');
   const subtasks = (data["subtasks"] as unknown[]).map((st, i) => {
     const s = requireObject(st, `subtasks[${i}]`);
+    const criteria = Array.isArray(s["acceptance_criteria"])
+      ? (s["acceptance_criteria"] as unknown[]).filter((c): c is string => typeof c === "string")
+      : [];
     return {
       id: requireString(s["id"], `subtasks[${i}].id`),
       agent_id: requireString(s["agent_id"], `subtasks[${i}].agent_id`),
@@ -106,7 +111,11 @@ function parsePlanCreatedPayload(raw: Record<string, unknown>): PlanCreatedPaylo
             requireString(d, `subtasks[${i}].depends_on[${j}]`),
           )
         : [],
-      expected_output: requireString(s["expected_output"], `subtasks[${i}].expected_output`),
+      expected_output: typeof s["expected_output"] === "string" ? s["expected_output"] : "",
+      acceptance_criteria: criteria,
+      model_tier: typeof s["model_tier"] === "string" ? s["model_tier"] : null,
+      thinking_effort: typeof s["thinking_effort"] === "string" ? s["thinking_effort"] : null,
+      budget_fraction: typeof s["budget_fraction"] === "number" ? s["budget_fraction"] : null,
     };
   });
 
@@ -275,26 +284,52 @@ export function parseTraceEvent(raw: unknown): TraceEvent {
     }
 
     default: {
+      const agent_id =
+        obj["agent_id"] === null || obj["agent_id"] === undefined
+          ? null
+          : requireString(obj["agent_id"], "agent_id");
+      const payload = parseGenericPayload(rawPayload);
       const isKnownType = (Object.values(EventType) as string[]).includes(type);
       if (!isKnownType) {
-        throw new Error(
-          `[loadTrace] Unknown event type "${type}". ` +
-            `Known types: ${Object.values(EventType).join(",")}`,
-        );
+        // Forward compatibility: a newer backend may emit types this viewer does
+        // not know. Keep them visible instead of failing the whole trace.
+        const event: GenericEvent = {
+          ...base,
+          type: EventType.Other,
+          agent_id,
+          payload: { ...payload, data: { ...(payload.data ?? {}), original_type: type } },
+        };
+        return event;
       }
 
       const event: GenericEvent = {
         ...base,
         type: type as GenericEventType,
-        agent_id:
-          obj["agent_id"] === null || obj["agent_id"] === undefined
-            ? null
-            : requireString(obj["agent_id"], "agent_id"),
-        payload: parseGenericPayload(rawPayload),
+        agent_id,
+        payload,
       };
       return event;
     }
   }
+}
+
+/**
+ * Canonical order: by time, then `seq`. Ordering by `seq` alone breaks when
+ * events come from several emitters (workers, a resumed run's new stream).
+ */
+export function sortEvents(events: TraceEvent[]): TraceEvent[] {
+  return events.slice().sort((a, b) => a.ts - b.ts || a.seq - b.seq);
+}
+
+/**
+ * Identity of an event for de-duplication. `seq` alone is not unique: worker
+ * processes number their own events, and a resumed run's new stream restarts at 1.
+ */
+export function eventKey(event: TraceEvent): string {
+  return [
+    event.seq, event.ts, event.type, event.agent_id ?? "",
+    event.tool_call_id ?? "", event.payload.message.slice(0, 80),
+  ].join("|");
 }
 
 /**
@@ -314,7 +349,7 @@ export function normalizeEvents(raws: unknown[]): TraceEvent[] {
   });
 
   // Sort by seq — canonical ordering per schema spec
-  return events.slice().sort((a, b) => a.seq - b.seq);
+  return sortEvents(events);
 }
 
 /**
