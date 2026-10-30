@@ -13,6 +13,9 @@ export function StreamingControlBar({ runId }: StreamingControlBarProps) {
   const [sendError, setSendError] = React.useState<string | null>(null);
   const [isCancelling, setIsCancelling] = React.useState(false);
   const [cancelError, setCancelError] = React.useState<string | null>(null);
+  // "cancel_requested": another server replica owns the run and stops it on its
+  // next lease heartbeat (a few seconds), so say so instead of "Cancelling…".
+  const [remoteCancel, setRemoteCancel] = React.useState(false);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +41,8 @@ export function StreamingControlBar({ runId }: StreamingControlBarProps) {
     setIsCancelling(true);
     setCancelError(null);
     try {
-      await cancelRun(runId);
+      const status = await cancelRun(runId);
+      setRemoteCancel(status === "cancel_requested");
       // Stay in isCancelling=true — the run:cancelled terminal SSE event will finalize state
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : String(err));
@@ -100,7 +104,7 @@ export function StreamingControlBar({ runId }: StreamingControlBarProps) {
           ) : (
             <OctagonX className="w-3.5 h-3.5" aria-hidden="true" />
           )}
-          {isCancelling ? "Cancelling…" : "Cancel run"}
+          {isCancelling ? (remoteCancel ? "Cancel sent to owning replica…" : "Cancelling…") : "Cancel run"}
         </button>
         {cancelError && (
           <p className="stream-ctrl-error" role="alert">

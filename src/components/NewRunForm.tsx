@@ -1,8 +1,9 @@
 import React from "react";
-import { Play, X, Loader2, DollarSign, AlertCircle } from "lucide-react";
+import { Play, X, Loader2, DollarSign, AlertCircle, FolderGit2 } from "lucide-react";
+import { workspaceNameError } from "../utils/workspace";
 
 export interface NewRunFormProps {
-  onSubmit: (task: string, budgetUsd: number | undefined) => void;
+  onSubmit: (task: string, budgetUsd: number | undefined, workspace?: string) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
   submitError?: string | null;
@@ -16,6 +17,8 @@ export function NewRunForm({
 }: NewRunFormProps) {
   const [task, setTask] = React.useState("");
   const [budgetStr, setBudgetStr] = React.useState("");
+  const [workspace, setWorkspace] = React.useState("");
+  const workspaceError = workspaceNameError(workspace);
   const taskRef = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
@@ -25,13 +28,13 @@ export function NewRunForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = task.trim();
-    if (!trimmed || isSubmitting) return;
+    if (!trimmed || isSubmitting || workspaceError) return;
     const parsed = parseFloat(budgetStr);
     const budget = budgetStr.trim() && !isNaN(parsed) && parsed > 0 ? parsed : undefined;
-    onSubmit(trimmed, budget);
+    onSubmit(trimmed, budget, workspace.trim() || undefined);
   }
 
-  const canSubmit = task.trim().length > 0 && !isSubmitting;
+  const canSubmit = task.trim().length > 0 && !isSubmitting && !workspaceError;
 
   return (
     <div className="new-run-card">
@@ -91,6 +94,31 @@ export function NewRunForm({
             />
           </div>
           <p className="new-run-hint">Leave blank to use the service default limit.</p>
+        </div>
+
+        {/* Workspace field */}
+        <div className="new-run-field">
+          <label className="new-run-label" htmlFor="workspace-input">
+            Workspace
+            <span className="new-run-optional">optional</span>
+          </label>
+          <div className="new-run-input-wrap">
+            <FolderGit2 className="new-run-input-icon" aria-hidden="true" />
+            <input
+              id="workspace-input"
+              type="text"
+              className="new-run-input"
+              value={workspace}
+              onChange={(e) => setWorkspace(e.target.value)}
+              placeholder="e.g. app-gateway"
+              disabled={isSubmitting}
+              aria-invalid={!!workspaceError}
+            />
+          </div>
+          <p className={workspaceError ? "new-run-hint new-run-hint--error" : "new-run-hint"}>
+            {workspaceError ??
+              "A named project workspace that runs keep building on. Blank gives this run a fresh workspace of its own."}
+          </p>
         </div>
 
         {/* Error */}

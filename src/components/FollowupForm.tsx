@@ -1,11 +1,12 @@
 import React from "react";
-import { Play, X, Loader2, DollarSign, AlertCircle, ArrowUpRight } from "lucide-react";
+import { Play, X, Loader2, DollarSign, AlertCircle, ArrowUpRight, FolderGit2 } from "lucide-react";
+import { workspaceNameError } from "../utils/workspace";
 
 export interface FollowupFormProps {
   priorRunId: string;
   priorName?: string | null;
   priorTask?: string | null;
-  onSubmit: (task: string, budgetUsd: number | undefined) => void;
+  onSubmit: (task: string, budgetUsd: number | undefined, workspace?: string) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
   submitError?: string | null;
@@ -22,6 +23,8 @@ export function FollowupForm({
 }: FollowupFormProps) {
   const [task, setTask] = React.useState("");
   const [budgetStr, setBudgetStr] = React.useState("");
+  const [workspace, setWorkspace] = React.useState("");
+  const workspaceError = workspaceNameError(workspace);
   const taskRef = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
@@ -31,13 +34,13 @@ export function FollowupForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = task.trim();
-    if (!trimmed || isSubmitting) return;
+    if (!trimmed || isSubmitting || workspaceError) return;
     const parsed = parseFloat(budgetStr);
     const budget = budgetStr.trim() && !isNaN(parsed) && parsed > 0 ? parsed : undefined;
-    onSubmit(trimmed, budget);
+    onSubmit(trimmed, budget, workspace.trim() || undefined);
   }
 
-  const canSubmit = task.trim().length > 0 && !isSubmitting;
+  const canSubmit = task.trim().length > 0 && !isSubmitting && !workspaceError;
   const displayName = priorName ?? priorRunId.slice(0, 12) + "…";
 
   return (
@@ -111,6 +114,30 @@ export function FollowupForm({
             />
           </div>
           <p className="new-run-hint">Leave blank to use the service default limit.</p>
+        </div>
+
+        <div className="new-run-field">
+          <label className="new-run-label" htmlFor="followup-workspace-input">
+            Workspace
+            <span className="new-run-optional">optional</span>
+          </label>
+          <div className="new-run-input-wrap">
+            <FolderGit2 className="new-run-input-icon" aria-hidden="true" />
+            <input
+              id="followup-workspace-input"
+              type="text"
+              className="new-run-input"
+              value={workspace}
+              onChange={(e) => setWorkspace(e.target.value)}
+              placeholder="same as the prior run"
+              disabled={isSubmitting}
+              aria-invalid={!!workspaceError}
+            />
+          </div>
+          <p className={workspaceError ? "new-run-hint new-run-hint--error" : "new-run-hint"}>
+            {workspaceError ??
+              "Blank continues in the prior run's workspace, so it sees the files that run wrote."}
+          </p>
         </div>
 
         {submitError && (

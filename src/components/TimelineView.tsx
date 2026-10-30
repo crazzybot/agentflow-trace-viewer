@@ -49,6 +49,13 @@ import {
   Globe,
   Layers,
   Loader2,
+  ShieldCheck,
+  CirclePause,
+  Split,
+  GitCommitHorizontal,
+  Undo2,
+  CircleHelp,
+  MessageSquare,
 } from "lucide-react";
 import type { TraceEvent } from "../types/events";
 import { EventType } from "../types/events";
@@ -80,6 +87,13 @@ const EVENT_ICON_MAP: Record<string, React.ComponentType<{ className?: string; "
   FlagTriangleRight,
   OctagonAlert,
   Gauge,
+  ShieldCheck,
+  CirclePause,
+  Split,
+  GitCommitHorizontal,
+  Undo2,
+  CircleHelp,
+  MessageSquare,
 };
 
 // ---------------------------------------------------------------------------

@@ -202,6 +202,66 @@ export const EVENT_META: Record<EventTypeValue, EventMeta> = {
     iconColor: "text-indigo-400",
     summaryBg: "bg-indigo-50 border-indigo-100",
   },
+  [EventType.TaskVerified]: {
+    label:     "Verified",
+    border:    "border-l-teal-500",
+    dot:       "bg-teal-500 ring-teal-300",
+    badge:     "bg-teal-900/60 text-teal-300 ring-1 ring-teal-500/40",
+    rowHover:  "hover:bg-teal-950/30",
+    icon:      "ShieldCheck",
+    iconColor: "text-teal-400",
+    summaryBg: "bg-teal-50 border-teal-100",
+  },
+  [EventType.RunInterrupted]: {
+    label:     "Interrupted",
+    border:    "border-l-orange-500",
+    dot:       "bg-orange-500 ring-orange-300",
+    badge:     "bg-orange-900/60 text-orange-300 ring-1 ring-orange-500/40",
+    rowHover:  "hover:bg-orange-950/30",
+    icon:      "CirclePause",
+    iconColor: "text-orange-400",
+    summaryBg: "bg-orange-50 border-orange-100",
+  },
+  [EventType.TaskDecomposed]: {
+    label:     "Decomposed",
+    border:    "border-l-sky-500",
+    dot:       "bg-sky-500 ring-sky-300",
+    badge:     "bg-sky-900/60 text-sky-300 ring-1 ring-sky-500/40",
+    rowHover:  "hover:bg-sky-950/30",
+    icon:      "Split",
+    iconColor: "text-sky-400",
+    summaryBg: "bg-sky-50 border-sky-100",
+  },
+  [EventType.CheckpointCreated]: {
+    label:     "Checkpoint",
+    border:    "border-l-slate-500",
+    dot:       "bg-slate-500 ring-slate-300",
+    badge:     "bg-slate-900/60 text-slate-300 ring-1 ring-slate-500/40",
+    rowHover:  "hover:bg-slate-950/30",
+    icon:      "GitCommitHorizontal",
+    iconColor: "text-slate-400",
+    summaryBg: "bg-slate-50 border-slate-100",
+  },
+  [EventType.WorkspaceRestored]: {
+    label:     "Rolled Back",
+    border:    "border-l-rose-500",
+    dot:       "bg-rose-500 ring-rose-300",
+    badge:     "bg-rose-900/60 text-rose-300 ring-1 ring-rose-500/40",
+    rowHover:  "hover:bg-rose-950/30",
+    icon:      "Undo2",
+    iconColor: "text-rose-400",
+    summaryBg: "bg-rose-50 border-rose-100",
+  },
+  [EventType.Other]: {
+    label:     "Other",
+    border:    "border-l-gray-500",
+    dot:       "bg-gray-500 ring-gray-300",
+    badge:     "bg-gray-900/60 text-gray-300 ring-1 ring-gray-500/40",
+    rowHover:  "hover:bg-gray-950/30",
+    icon:      "CircleHelp",
+    iconColor: "text-gray-400",
+    summaryBg: "bg-gray-50 border-gray-100",
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -425,7 +485,9 @@ export function groupEventsByTurn(events: TraceEvent[]): TurnGroup[] {
       continue;
     }
 
-    const key = `${agentId ?? ""}:${turnIndex}`;
+    // Session-log traces carry invocation_id, which keeps parallel or repeated
+    // invocations of one agent (micro-steps, retries, repairs) in separate groups.
+    const key = `${event.invocation_id ?? agentId ?? ""}:${turnIndex}`;
     let group = openGroups.get(key);
 
     if (!group) {

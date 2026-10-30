@@ -34,6 +34,22 @@ export const EventType = {
   RunAwaitingInput: "run:awaiting_input",
   RunCancelled: "run:cancelled",
   RunMessageReceived: "run:message_received",
+  /** Independent verification of a subtask's acceptance criteria. */
+  TaskVerified: "task:verified",
+  // ── Viewer-only types: synthesised from the session log (no SSE equivalent) ──
+  /** The run was left in flight by a restart (resumable). */
+  RunInterrupted: "run:interrupted",
+  /** A subtask was split into micro-steps by the decomposer. */
+  TaskDecomposed: "task:decomposed",
+  /** A git checkpoint of the workspace was taken. */
+  CheckpointCreated: "checkpoint:created",
+  /** A failed attempt's files were rolled back. */
+  WorkspaceRestored: "workspace:restored",
+  /**
+   * Any event type this viewer does not know yet. The original type is kept in
+   * `payload.data.original_type`, so newer backends never break the viewer.
+   */
+  Other: "event:other",
 } as const;
 
 /** Union of all known event-type string literals. */
@@ -62,8 +78,34 @@ export interface Subtask {
   instruction: string;
   /** IDs of subtasks that must complete before this one can start. */
   depends_on: string[];
-  /** Human-readable description of the expected deliverable. */
+  /** Human-readable description of the expected deliverable ("" if none). */
   expected_output: string;
+  /** File-checkable statements an independent verifier confirms. */
+  acceptance_criteria?: string[];
+  /** Planner cost-tuning hints. */
+  model_tier?: string | null;
+  thinking_effort?: string | null;
+  /** Share of the run budget (0–1). */
+  budget_fraction?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Verification (task:verified payload.data.verification, results.verification)
+// ---------------------------------------------------------------------------
+
+export interface CriterionCheck {
+  criterion: string;
+  met: boolean;
+  evidence: string;
+}
+
+export interface Verification {
+  /** true = all met, false = some unmet, null = inconclusive (verifier failed). */
+  passed: boolean | null;
+  checks: CriterionCheck[];
+  summary: string;
+  /** Repair rounds the agent was given before this verdict. */
+  repairs: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +206,11 @@ interface BaseEvent {
    * event, allowing the UI to link them together.
    */
   tool_call_id?: string;
+  /**
+   * Agent invocation this event belongs to (session-log traces only). Separates
+   * the turns of parallel or repeated invocations of the same agent.
+   */
+  invocation_id?: string;
 }
 
 export interface RunStartedEvent extends BaseEvent {
@@ -221,7 +268,7 @@ export type TraceEvent =
 // results.jsonl — SubtaskResult record
 // ---------------------------------------------------------------------------
 
-export type SubtaskResultStatus = "success" | "partial" | "error";
+export type SubtaskResultStatus = "success" | "partial" | "failed" | "error";
 
 export interface SubtaskResultOutput {
   /** Free-text output from the agent. */
@@ -251,6 +298,10 @@ export interface SubtaskResult {
    * includes cost telemetry in `results.jsonl`.
    */
   cost_usd?: number;
+  /** Independent verification verdict, when the subtask had acceptance criteria. */
+  verification?: Verification | null;
+  /** Workspace checkpoint commit taken when the subtask finished. */
+  checkpoint?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,4 +335,11 @@ export interface RunTrace {
    * Empty array if the file was absent or not provided.
    */
   results: SubtaskResult[];
+  /** Where the events came from: the captured SSE stream or the session log. */
+  origin?: "events" | "session" | "stream";
+  /**
+   * Exact total run cost from the session log's `cost_added` events
+   * (includes retries, repairs and verifiers). Absent for SSE-only traces.
+   */
+  totalCostUsd?: number;
 }

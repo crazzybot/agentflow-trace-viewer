@@ -41,8 +41,9 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Zap,
   ChevronDown, ChevronRight, Copy, Check,
   ArrowRight, Layers,
+  ShieldCheck, ShieldAlert, ShieldQuestion, GitCommitHorizontal, Undo2, Split, CircleHelp,
 } from "lucide-react";
-import type { TraceEvent } from "../types/events";
+import type { TraceEvent, Verification } from "../types/events";
 import { EventType } from "../types/events";
 import { EVENT_META } from "./timelineUtils";
 
@@ -766,6 +767,23 @@ function PlanCreatedDetail({
                 Expected: {st.expected_output}
               </p>
             )}
+            {/* Acceptance criteria — checked by an independent verifier */}
+            {st.acceptance_criteria && st.acceptance_criteria.length > 0 && (
+              <div className="border-t border-gray-700/60 pt-2 mt-1">
+                <p className="text-xs text-teal-400 flex items-center gap-1 mb-1">
+                  <ShieldCheck className="w-3 h-3" aria-hidden /> Acceptance criteria (independently verified)
+                </p>
+                <ul className="text-xs text-gray-400 list-disc pl-5 space-y-0.5">
+                  {st.acceptance_criteria.map((c) => <li key={c}>{c}</li>)}
+                </ul>
+              </div>
+            )}
+            {(st.model_tier || st.thinking_effort) && (
+              <p className="text-xs text-gray-500">
+                {st.model_tier && <span className="mr-3">tier: <span className="font-mono text-gray-300">{st.model_tier}</span></span>}
+                {st.thinking_effort && <span>effort: <span className="font-mono text-gray-300">{st.thinking_effort}</span></span>}
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -878,6 +896,19 @@ function TaskResultDetail({
         </div>
       )}
 
+      {/* Independent verification (session-log traces carry it on the result) */}
+      {asVerification(data.verification) && (
+        <div className="mb-3">
+          <p className="text-xs text-gray-500 mb-1.5">Verification</p>
+          <VerificationBlock verification={asVerification(data.verification)!} />
+        </div>
+      )}
+      {typeof data.checkpoint === "string" && (
+        <p className="text-xs text-gray-500 mb-3">
+          Checkpoint <span className="font-mono text-gray-300">{data.checkpoint.slice(0, 12)}</span>
+        </p>
+      )}
+
       {/* Stats bar */}
       {(tokens != null || duration != null) && (
         <div className="flex items-center gap-5 mt-3 pt-3 border-t border-gray-800 text-xs text-gray-500">
@@ -903,6 +934,121 @@ function TaskResultDetail({
       )}
     </Section>
   );
+}
+
+/** Verdict table shared by task:verified and task results that carry one. */
+function VerificationBlock({ verification }: { verification: Verification }) {
+  const { passed, checks, summary, repairs } = verification;
+  const Icon = passed === true ? ShieldCheck : passed === false ? ShieldAlert : ShieldQuestion;
+  const tone = passed === true ? "text-teal-400" : passed === false ? "text-red-400" : "text-amber-400";
+  const label = passed === true ? "Passed" : passed === false ? "Failed" : "Inconclusive (counted as a pass)";
+  return (
+    <div className="space-y-2">
+      <p className={`text-sm font-semibold flex items-center gap-2 ${tone}`}>
+        <Icon className="w-4 h-4" aria-hidden /> {label}
+        {repairs > 0 && <span className="text-xs font-normal text-gray-400">after {repairs} repair round{repairs !== 1 ? "s" : ""}</span>}
+      </p>
+      {summary && <p className="text-xs text-gray-400">{summary}</p>}
+      {checks.length > 0 && (
+        <ul className="space-y-1.5">
+          {checks.map((c) => (
+            <li key={c.criterion} className="rounded-md border border-gray-700 bg-gray-800/40 px-3 py-2">
+              <p className="text-xs flex items-start gap-2">
+                {c.met
+                  ? <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0 mt-0.5" aria-hidden />
+                  : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" aria-hidden />}
+                <span className="text-gray-200">{c.criterion}</span>
+              </p>
+              {c.evidence && <p className="text-xs text-gray-500 pl-5 mt-0.5">{c.evidence}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function asVerification(value: unknown): Verification | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Partial<Verification>;
+  return {
+    passed: v.passed === true ? true : v.passed === false ? false : null,
+    checks: Array.isArray(v.checks) ? v.checks : [],
+    summary: typeof v.summary === "string" ? v.summary : "",
+    repairs: typeof v.repairs === "number" ? v.repairs : 0,
+  };
+}
+
+/** task:verified — the independent verifier's verdict. */
+function TaskVerifiedDetail({ event }: { event: TraceEvent }) {
+  const data = event.payload.data as Record<string, unknown> | null;
+  const verification = asVerification(data?.["verification"]);
+  if (!verification) return null;
+  return (
+    <Section>
+      <p className={SECTION_LABEL}>
+        <ShieldCheck className="w-3 h-3" aria-hidden />
+        Verification of {String(data?.["subtask_id"] ?? "subtask")}
+      </p>
+      <VerificationBlock verification={verification} />
+    </Section>
+  );
+}
+
+/** checkpoint:created / workspace:restored / task:decomposed — file and step lists. */
+function SessionFactDetail({ event }: { event: TraceEvent }) {
+  const data = (event.payload.data ?? {}) as Record<string, unknown>;
+  const list = (key: string) => (Array.isArray(data[key]) ? (data[key] as unknown[]) : []);
+  if (event.type === EventType.CheckpointCreated) {
+    const changed = list("changed").map(String);
+    return (
+      <Section>
+        <p className={SECTION_LABEL}><GitCommitHorizontal className="w-3 h-3" aria-hidden /> Workspace checkpoint</p>
+        <p className="text-xs text-gray-400 mb-2">Commit <span className="font-mono text-gray-200">{String(data["sha"] ?? "")}</span> in the run's shadow repository.</p>
+        <p className="text-xs text-gray-500 mb-1">Changed files ({changed.length})</p>
+        <ul className="text-xs font-mono text-gray-300 space-y-0.5 max-h-48 overflow-y-auto">{changed.map((p) => <li key={p}>{p}</li>)}</ul>
+      </Section>
+    );
+  }
+  if (event.type === EventType.WorkspaceRestored) {
+    const paths = list("paths").map(String);
+    return (
+      <Section>
+        <p className={SECTION_LABEL}><Undo2 className="w-3 h-3" aria-hidden /> Rolled back before the retry</p>
+        <p className="text-xs text-gray-400 mb-2">Files the failed attempt wrote, restored to the subtask's starting snapshot (new files removed).</p>
+        <ul className="text-xs font-mono text-gray-300 space-y-0.5">{paths.map((p) => <li key={p}>{p}</li>)}</ul>
+      </Section>
+    );
+  }
+  if (event.type === EventType.TaskDecomposed) {
+    const micro = list("micro") as { id?: string; instruction?: string; depends_on?: string[] }[];
+    return (
+      <Section>
+        <p className={SECTION_LABEL}><Split className="w-3 h-3" aria-hidden /> Micro-steps ({micro.length})</p>
+        <ul className="space-y-1.5">
+          {micro.map((m) => (
+            <li key={m.id} className="text-xs">
+              <span className="font-mono text-sky-400">{m.id}</span>
+              {m.depends_on && m.depends_on.length > 0 && <span className="text-gray-500"> ← {m.depends_on.join(", ")}</span>}
+              <p className="text-gray-400 line-clamp-3">{m.instruction}</p>
+            </li>
+          ))}
+        </ul>
+      </Section>
+    );
+  }
+  if (event.type === EventType.Other) {
+    return (
+      <Section>
+        <p className={SECTION_LABEL}><CircleHelp className="w-3 h-3" aria-hidden /> Unrecognised event</p>
+        <p className="text-xs text-gray-400">
+          Type <span className="font-mono text-gray-200">{String(data["original_type"] ?? "?")}</span> is newer than this
+          viewer. It is shown as-is; see the full payload below.
+        </p>
+      </Section>
+    );
+  }
+  return null;
 }
 
 /** run:complete / run:error / run:budget_exceeded — compact run summary. */
@@ -1023,7 +1169,11 @@ export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
     event.type === EventType.TaskFailed    ||
     event.type === EventType.RunComplete   ||
     event.type === EventType.RunError      ||
-    event.type === EventType.RunBudgetExceeded;
+    event.type === EventType.RunBudgetExceeded ||
+    event.type === EventType.TaskVerified  ||
+    event.type === EventType.CheckpointCreated ||
+    event.type === EventType.WorkspaceRestored ||
+    event.type === EventType.TaskDecomposed;
 
   return (
     <aside
@@ -1099,6 +1249,13 @@ export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
           event.type === EventType.RunBudgetExceeded) && (
           <RunSummaryDetail event={event} />
         )}
+
+        {event.type === EventType.TaskVerified && <TaskVerifiedDetail event={event} />}
+
+        {(event.type === EventType.CheckpointCreated ||
+          event.type === EventType.WorkspaceRestored ||
+          event.type === EventType.TaskDecomposed    ||
+          event.type === EventType.Other) && <SessionFactDetail event={event} />}
 
         {/* ── Collapsible raw JSON ──────────────────────────────────────── */}
         <Collapsible
