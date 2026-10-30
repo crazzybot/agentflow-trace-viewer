@@ -3,7 +3,7 @@ import type { RunInfo } from '../types/runs';
 import type { RunArtifact, RunArtifactContent } from '../types/artifacts';
 import type { SessionEvent } from '../types/session';
 import type { RunCheckpoint } from '../types/checkpoints';
-import type { CampaignView, CreateCampaignRequest } from '../types/campaigns';
+import type { CampaignLimitsUpdate, CampaignView, CreateCampaignRequest } from '../types/campaigns';
 
 export interface CreateRunRequest {
   task: string;
@@ -172,6 +172,27 @@ export async function createCampaign(request: CreateCampaignRequest): Promise<Ca
 
 export async function pauseCampaign(campaignId: string): Promise<CampaignView> {
   const res = await fetch(`${AGENTFLOW_API_URL}/api/campaigns/${encodeURIComponent(campaignId)}/pause`, { method: 'POST' });
+  await ensureOk(res);
+  return res.json();
+}
+
+/** Change a campaign's limits (omitted fields unchanged; null removes a budget). */
+export async function updateCampaignLimits(campaignId: string, update: CampaignLimitsUpdate): Promise<CampaignView> {
+  const res = await fetch(`${AGENTFLOW_API_URL}/api/campaigns/${encodeURIComponent(campaignId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(update),
+  });
+  await ensureOk(res);
+  return res.json();
+}
+
+/** Give a blocked or failing feature fresh attempts, with optional guidance for its next session. */
+export async function retryCampaignFeature(campaignId: string, featureId: string, guidance: string): Promise<CampaignView> {
+  const res = await fetch(
+    `${AGENTFLOW_API_URL}/api/campaigns/${encodeURIComponent(campaignId)}/features/${encodeURIComponent(featureId)}/retry`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guidance }) },
+  );
   await ensureOk(res);
   return res.json();
 }

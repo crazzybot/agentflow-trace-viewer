@@ -7,12 +7,13 @@ import React from "react";
 import {
   Activity, AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, CircleDashed,
   CircleSlash, DollarSign, ExternalLink, FolderGit2, Loader2, Pause, Play, PlusCircle,
-  RefreshCw, Target, XCircle, X,
+  RefreshCw, RotateCcw, SlidersHorizontal, Target, XCircle, X,
 } from "lucide-react";
 import {
   createCampaign, fetchAgentIds, fetchCampaign, fetchCampaigns, pauseCampaign, resumeCampaign,
+  retryCampaignFeature, updateCampaignLimits,
 } from "../api/agentflow";
-import type { CampaignStatus, CampaignView, Feature, FeatureStatus } from "../types/campaigns";
+import type { CampaignLimitsUpdate, CampaignStatus, CampaignView, Feature, FeatureStatus } from "../types/campaigns";
 import { workspaceNameError } from "../utils/workspace";
 
 type CampaignRoute = { page: "campaigns" } | { page: "new-campaign" } | { page: "campaign"; campaignId: string };
@@ -263,22 +264,69 @@ function NewCampaign({ navigate }: { navigate: (hash: string) => void }) {
 // Detail
 // ---------------------------------------------------------------------------
 
-function FeatureRow({ feature, navigate }: { feature: Feature; navigate: (hash: string) => void }) {
+function FeatureRow({
+  feature, campaign, onRetry, navigate,
+}: {
+  feature: Feature;
+  campaign: CampaignView["campaign"];
+  onRetry: (featureId: string, guidance: string) => Promise<boolean>;
+  navigate: (hash: string) => void;
+}) {
+  const active = campaign.pending_feature === feature.id && !!campaign.pending_session;
   const [open, setOpen] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
+  const [guidance, setGuidance] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const sessions = feature.sessions ?? (feature.last_run_id ? [feature.last_run_id] : []);
+  const canRetry = feature.status === "blocked" || feature.status === "failing";
+  const openRun = (runId: string) => navigate(`#/runs/${encodeURIComponent(runId)}`);
+
+  async function submitRetry() {
+    setBusy(true);
+    const ok = await onRetry(feature.id, guidance);
+    setBusy(false);
+    if (ok) { setRetrying(false); setGuidance(""); }
+  }
+
   return (
-    <li className={`cmp-feature cmp-feature--${feature.status}`}>
-      <button type="button" className="cmp-feature-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        {open ? <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" /> : <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />}
-        {FEATURE_ICON[feature.status]}
-        <span className="cmp-feature-id">{feature.id}</span>
-        <span className="cmp-feature-title">{feature.title}</span>
-        <span className="cmp-feature-meta">
-          {feature.status}{feature.attempts ? ` · ${feature.attempts} failed attempt${feature.attempts !== 1 ? "s" : ""}` : ""}
-        </span>
-      </button>
+    <li className={`cmp-feature cmp-feature--${feature.status} ${active ? "cmp-feature--active" : ""}`}>
+      <div className="cmp-feature-head-row">
+        <button type="button" className="cmp-feature-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" /> : <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />}
+          {FEATURE_ICON[feature.status]}
+          <span className="cmp-feature-id">{feature.id}</span>
+          <span className="cmp-feature-title">{feature.title}</span>
+          <span className="cmp-feature-meta">
+            {feature.status}
+            {feature.attempts ? ` · ${feature.attempts} failed attempt${feature.attempts !== 1 ? "s" : ""}` : ""}
+            {sessions.length > 0 && ` · ${sessions.length} session${sessions.length !== 1 ? "s" : ""}`}
+          </span>
+        </button>
+        {active && (
+          <button type="button" className="cmp-live-badge" onClick={() => openRun(campaign.pending_session!)} title="Open the session in progress">
+            <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" /> in progress · watch
+          </button>
+        )}
+        {canRetry && !active && !retrying && (
+          <button type="button" className="cmp-btn cmp-btn--small" onClick={() => { setRetrying(true); setOpen(true); }}
+            title="Give this feature fresh attempts, optionally with guidance for the next session">
+            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" /> Retry
+          </button>
+        )}
+      </div>
+
       {open && (
         <div className="cmp-feature-body">
           <p>{feature.description}</p>
+
+          {feature.status === "blocked" && !retrying && (
+            <p className="cmp-callout">
+              Blocked after {attemptsLabel(feature)} — later sessions skip it. Check the failed checks and the
+              last session's notes below; open the session to see exactly what it did. Then <b>Retry</b>, ideally
+              with guidance on what to do differently.
+            </p>
+          )}
+
           <p className="cmp-sub">Checks</p>
           <ul className="cmp-checks">
             {feature.checks.map((check) => {
@@ -293,11 +341,59 @@ function FeatureRow({ feature, navigate }: { feature: Feature; navigate: (hash: 
               );
             })}
           </ul>
+
+          {feature.guidance && !retrying && (
+            <>
+              <p className="cmp-sub">Operator guidance for the next session</p>
+              <pre className="cmp-notes">{feature.guidance}</pre>
+            </>
+          )}
+
+          {retrying && (
+            <div className="cmp-retry">
+              <label className="cmp-sub" htmlFor={`guidance-${feature.id}`}>Guidance for the next session (optional)</label>
+              <textarea id={`guidance-${feature.id}`} className="new-run-textarea" rows={3} value={guidance}
+                onChange={(e) => setGuidance(e.target.value)} disabled={busy}
+                placeholder="What should the next attempt do differently? e.g. the tests live in tests/, run them with pytest -q" />
+              <p className="cmp-help">
+                Resets the failed attempts and puts this feature first. Its checks stay the same, and only the
+                independent verifier can mark it passing. If the campaign is stopped, resume it afterwards.
+              </p>
+              <div className="cmp-actions">
+                <button type="button" className="cmp-btn" onClick={() => setRetrying(false)} disabled={busy}>Cancel</button>
+                <button type="button" className="cmp-btn cmp-btn--primary" onClick={submitRetry} disabled={busy}>
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="w-4 h-4" aria-hidden="true" />}
+                  Retry feature
+                </button>
+              </div>
+            </div>
+          )}
+
           {feature.notes && (<><p className="cmp-sub">Last session's notes</p><pre className="cmp-notes">{feature.notes}</pre></>)}
-          {feature.last_run_id && (
-            <button type="button" className="cmp-link" onClick={() => navigate(`#/runs/${encodeURIComponent(feature.last_run_id!)}`)}>
-              <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Open the last session's run
-            </button>
+
+          {sessions.length > 0 && (
+            <>
+              <p className="cmp-sub">Sessions</p>
+              <ol className="cmp-sessions">
+                {sessions.map((runId, i) => {
+                  const number = campaign.sessions.indexOf(runId) + 1;
+                  const inProgress = runId === campaign.pending_session;
+                  const latest = i === sessions.length - 1;
+                  return (
+                    <li key={runId}>
+                      <button type="button" className="cmp-link" onClick={() => openRun(runId)}>
+                        <span className="cmp-session-no">{number > 0 ? `#${number}` : "—"}</span>
+                        <span className="font-mono">{runId.slice(0, 8)}…</span>
+                        <span className="cmp-muted">
+                          {inProgress ? "in progress" : latest ? `latest · ${feature.status}` : "failed verification"}
+                        </span>
+                        {inProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </>
           )}
         </div>
       )}
@@ -305,10 +401,76 @@ function FeatureRow({ feature, navigate }: { feature: Feature; navigate: (hash: 
   );
 }
 
+function attemptsLabel(feature: Feature): string {
+  return `${feature.attempts} failed attempt${feature.attempts !== 1 ? "s" : ""}`;
+}
+
+function LimitsEditor({
+  campaign, onSave, onCancel,
+}: {
+  campaign: CampaignView["campaign"];
+  onSave: (update: CampaignLimitsUpdate) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const [maxSessions, setMaxSessions] = React.useState(String(campaign.max_sessions));
+  const [budget, setBudget] = React.useState(campaign.budget_usd != null ? String(campaign.budget_usd) : "");
+  const [sessionBudget, setSessionBudget] = React.useState(campaign.session_budget_usd != null ? String(campaign.session_budget_usd) : "");
+  const [busy, setBusy] = React.useState(false);
+  const toLimit = (s: string): number | null => { const n = parseFloat(s); return s.trim() && n > 0 ? n : null; };
+  const max = parseInt(maxSessions, 10);
+  const valid = Number.isFinite(max) && max >= 1 && max <= 500;
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!valid) return;
+    setBusy(true);
+    // Blank budgets are sent as null: "no limit".
+    await onSave({ max_sessions: max, budget_usd: toLimit(budget), session_budget_usd: toLimit(sessionBudget) });
+    setBusy(false);
+  }
+
+  return (
+    <form className="cmp-limits" onSubmit={save}>
+      <div className="cmp-form-grid cmp-form-grid--3">
+        <div className="new-run-field">
+          <label className="new-run-label" htmlFor="lim-max">Max sessions</label>
+          <input id="lim-max" type="number" min="1" max="500" className="new-run-input" value={maxSessions}
+            onChange={(e) => setMaxSessions(e.target.value)} disabled={busy} />
+          <p className="new-run-hint">{campaign.sessions.length} used so far</p>
+        </div>
+        <div className="new-run-field">
+          <label className="new-run-label" htmlFor="lim-budget">Budget (USD)</label>
+          <div className="new-run-input-wrap">
+            <DollarSign className="new-run-input-icon" aria-hidden="true" />
+            <input id="lim-budget" type="number" min="0" step="0.01" className="new-run-input" value={budget}
+              onChange={(e) => setBudget(e.target.value)} placeholder="no limit" disabled={busy} />
+          </div>
+          <p className="new-run-hint">{money(campaign.spent_usd)} spent so far</p>
+        </div>
+        <div className="new-run-field">
+          <label className="new-run-label" htmlFor="lim-sbudget">Per session</label>
+          <div className="new-run-input-wrap">
+            <DollarSign className="new-run-input-icon" aria-hidden="true" />
+            <input id="lim-sbudget" type="number" min="0" step="0.01" className="new-run-input" value={sessionBudget}
+              onChange={(e) => setSessionBudget(e.target.value)} placeholder="no limit" disabled={busy} />
+          </div>
+        </div>
+      </div>
+      <div className="cmp-actions">
+        <button type="button" className="cmp-btn" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button type="submit" className="cmp-btn cmp-btn--primary" disabled={busy || !valid}>
+          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />} Save limits
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function CampaignDetail({ campaignId, navigate }: { campaignId: string; navigate: (hash: string) => void }) {
   const [view, setView] = React.useState<CampaignView | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [editingLimits, setEditingLimits] = React.useState(false);
 
   const load = React.useCallback(() => {
     fetchCampaign(campaignId)
@@ -324,10 +486,10 @@ function CampaignDetail({ campaignId, navigate }: { campaignId: string; navigate
     return () => clearInterval(timer);
   }, [live, load]);
 
-  async function act(action: (id: string) => Promise<CampaignView>) {
+  async function act(action: (id: string) => Promise<CampaignView>): Promise<boolean> {
     setBusy(true);
-    try { setView(await action(campaignId)); setError(null); }
-    catch (err) { setError(errorText(err)); }
+    try { setView(await action(campaignId)); setError(null); return true; }
+    catch (err) { setError(errorText(err)); return false; }
     finally { setBusy(false); }
   }
 
@@ -336,6 +498,9 @@ function CampaignDetail({ campaignId, navigate }: { campaignId: string; navigate
   }
   const c = view.campaign;
   const canResume = c.status === "paused" || c.status === "stopped";
+  const canEditLimits = c.status !== "completed" && c.status !== "failed";
+  const attributed = new Set(view.features.flatMap((f) => f.sessions ?? (f.last_run_id ? [f.last_run_id] : [])));
+  const unattributed = c.sessions.filter((r) => !attributed.has(r));
 
   return (
     <section className="cmp-card cmp-card--wide">
@@ -367,38 +532,58 @@ function CampaignDetail({ campaignId, navigate }: { campaignId: string; navigate
       <div className="cmp-stats">
         <Progress view={view} />
         <span>Sessions <b>{c.sessions.length}</b> / {c.max_sessions}</span>
-        <span>Spent <b>{money(c.spent_usd)}</b>{c.budget_usd != null && <> of {money(c.budget_usd)}</>}</span>
+        <span>Spent <b>{money(c.spent_usd)}</b>{c.budget_usd != null ? <> of {money(c.budget_usd)}</> : " (no budget limit)"}</span>
         {c.session_budget_usd != null && <span>Per session {money(c.session_budget_usd)}</span>}
         <span>Agent <b>{c.agent_id}</b></span>
         <span className="font-mono">workspace/{c.workspace}</span>
+        {canEditLimits && !editingLimits && (
+          <button type="button" className="cmp-link" onClick={() => setEditingLimits(true)}>
+            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" /> Edit limits
+          </button>
+        )}
       </div>
+      {editingLimits && (
+        <LimitsEditor
+          campaign={c}
+          onCancel={() => setEditingLimits(false)}
+          onSave={async (update) => {
+            const ok = await act((id) => updateCampaignLimits(id, update));
+            if (ok) setEditingLimits(false);
+            return ok;
+          }}
+        />
+      )}
 
       <h3 className="cmp-h3">Feature ledger</h3>
       {c.status === "defining" && view.total === 0 && (
         <p className="cmp-muted"><Loader2 className="w-4 h-4 animate-spin inline" /> A planner is writing the feature list…</p>
       )}
       <ul className="cmp-features">
-        {view.features.map((f) => <FeatureRow key={f.id} feature={f} navigate={navigate} />)}
+        {view.features.map((f) => (
+          <FeatureRow
+            key={f.id}
+            feature={f}
+            campaign={c}
+            navigate={navigate}
+            onRetry={(featureId, guidance) => act((id) => retryCampaignFeature(id, featureId, guidance))}
+          />
+        ))}
       </ul>
 
-      {c.sessions.length > 0 && (
+      {unattributed.length > 0 && (
         <>
-          <h3 className="cmp-h3">Sessions</h3>
+          <h3 className="cmp-h3">Earlier sessions</h3>
+          <p className="cmp-help">Recorded before sessions were tracked per feature.</p>
           <ol className="cmp-sessions">
-            {c.sessions.map((runId, i) => {
-              const feature = view.features.find((f) => f.last_run_id === runId);
-              const pending = runId === c.pending_session;
-              return (
-                <li key={runId}>
-                  <button type="button" className="cmp-link" onClick={() => navigate(`#/runs/${encodeURIComponent(runId)}`)}>
-                    <span className="cmp-session-no">#{i + 1}</span>
-                    <span className="font-mono">{runId.slice(0, 8)}…</span>
-                    <span>{pending ? `${c.pending_feature} · in progress` : feature ? `${feature.id} · ${feature.title}` : ""}</span>
-                    {pending && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-                  </button>
-                </li>
-              );
-            })}
+            {unattributed.map((runId) => (
+              <li key={runId}>
+                <button type="button" className="cmp-link" onClick={() => navigate(`#/runs/${encodeURIComponent(runId)}`)}>
+                  <span className="cmp-session-no">#{c.sessions.indexOf(runId) + 1}</span>
+                  <span className="font-mono">{runId.slice(0, 8)}…</span>
+                  <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
           </ol>
         </>
       )}

@@ -17,6 +17,10 @@ export interface Feature {
   /** The last session's own summary for this feature. */
   notes: string;
   evidence: CriterionCheck[];
+  /** Run ids of every session that worked on this feature, oldest first (incl. in progress). */
+  sessions?: string[];
+  /** Operator guidance for the next session on this feature (set by a retry). */
+  guidance?: string;
 }
 
 export interface Campaign {
@@ -43,6 +47,13 @@ export interface CampaignView {
   features: Feature[];
   passing: number;
   total: number;
+}
+
+/** PATCH body: omit a field to keep it; `null` removes a budget limit. */
+export interface CampaignLimitsUpdate {
+  max_sessions?: number;
+  budget_usd?: number | null;
+  session_budget_usd?: number | null;
 }
 
 export interface CreateCampaignRequest {
