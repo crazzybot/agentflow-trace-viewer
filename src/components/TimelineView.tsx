@@ -180,7 +180,7 @@ function SummaryStrip({ summary, metaSummaryBg, metaIconColor }: {
           </code>
         )}
         {purpose && (
-          <div className="timeline-summary-purpose text-xs text-gray-400 mt-1 truncate" title={purpose}>
+          <div className="timeline-summary-purpose text-xs text-ink-subtle mt-1 truncate" title={purpose}>
             {purpose}
           </div>
         )}
@@ -264,7 +264,7 @@ const TimelineRow = React.memo(function TimelineRow({
       tabIndex={0}
       className={[
         "timeline-row",
-        `border-l-4 ${meta.border}`,
+        `border-l-3 ${meta.border}`,
         isSelected ? "timeline-row--selected" : meta.rowHover,
       ].join(" ")}
       onClick={() => onSelect(event)}
@@ -289,7 +289,7 @@ const TimelineRow = React.memo(function TimelineRow({
 
         {/* Timestamps */}
         <div className="timeline-ts-col" aria-label={`Timestamp ${formatTimestamp(event.ts)}`}>
-          <Clock className="w-3 h-3 shrink-0 text-gray-400" aria-hidden="true" />
+          <Clock className="w-3 h-3 shrink-0 text-ink-subtle" aria-hidden="true" />
           <span className="timeline-ts-abs">{formatTimestamp(event.ts)}</span>
           <span className="timeline-ts-rel">{formatElapsed(event.ts, startMs)}</span>
         </div>
@@ -313,7 +313,7 @@ const TimelineRow = React.memo(function TimelineRow({
         <ChevronRight
           className={[
             "timeline-chevron",
-            isSelected ? "text-blue-400" : "text-gray-300",
+            isSelected ? "text-accent" : "text-ink-subtle",
           ].join(" ")}
           aria-hidden="true"
         />
@@ -615,7 +615,7 @@ export function TimelineView({
   if (events.length === 0) {
     return (
       <div className="timeline-empty" role="status">
-        <p className="text-gray-500 text-sm">{emptyMessage}</p>
+        <p className="text-ink-muted text-sm">{emptyMessage}</p>
       </div>
     );
   }

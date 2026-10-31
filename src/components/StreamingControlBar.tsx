@@ -53,7 +53,7 @@ export function StreamingControlBar({ runId }: StreamingControlBarProps) {
   return (
     <div className="stream-ctrl-bar">
       <div className="stream-ctrl-left">
-        <Loader2 className="w-4 h-4 animate-spin text-indigo-500" aria-hidden="true" />
+        <Loader2 className="w-4 h-4 animate-spin text-accent" aria-hidden="true" />
         <span className="stream-status-text">Streaming live events…</span>
       </div>
 

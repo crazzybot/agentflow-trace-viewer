@@ -7,6 +7,14 @@
     <title>AgentFlow Trace Viewer</title>
   </head>
   <body>
+    <script>
+      // Apply the saved or OS theme before the first paint (same rule as src/utils/theme.ts)
+      try {
+        var t = localStorage.getItem('theme');
+        var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

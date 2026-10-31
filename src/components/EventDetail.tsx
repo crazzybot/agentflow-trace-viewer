@@ -49,7 +49,7 @@ import { EVENT_META } from "./timelineUtils";
 
 // ─── Colour token helpers ────────────────────────────────────────────────────
 
-const SECTION_LABEL = "text-xs uppercase tracking-widest text-gray-500 mb-3 flex items-center gap-1.5";
+const SECTION_LABEL = "text-xs font-semibold uppercase tracking-wide text-ink-subtle mb-3 flex items-center gap-1.5";
 
 // ─── JSON renderer ───────────────────────────────────────────────────────────
 
@@ -61,12 +61,12 @@ function JsonToken({
   value: string;
 }) {
   const colourMap: Record<typeof type, string> = {
-    key:     "text-blue-400",
-    string:  "text-green-400",
-    number:  "text-yellow-400",
-    boolean: "text-orange-400",
-    null:    "text-red-400",
-    punct:   "text-gray-400",
+    key:     "text-blue-700",
+    string:  "text-gain",
+    number:  "text-yellow-700",
+    boolean: "text-orange-700",
+    null:    "text-loss",
+    punct:   "text-ink-muted",
   };
   return <span className={colourMap[type]}>{value}</span>;
 }
@@ -150,9 +150,9 @@ function MetaRow({
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
-      <span className="text-gray-400 shrink-0">{icon}</span>
-      <span className="text-gray-500 w-24 shrink-0">{label}</span>
-      <span className="font-mono text-gray-200 truncate">{value}</span>
+      <span className="text-ink-muted shrink-0">{icon}</span>
+      <span className="text-ink-subtle w-24 shrink-0">{label}</span>
+      <span className="font-mono text-ink truncate">{value}</span>
     </div>
   );
 }
@@ -184,18 +184,18 @@ function CodeBlock({
   const visible   = truncated ? lines.slice(0, maxRows).join("\n") + "\n…" : code;
 
   return (
-    <div className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-950">
+    <div className="relative rounded-lg overflow-hidden border border-border bg-surface-muted">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800/80 border-b border-gray-700">
-        <span className="text-xs font-mono text-gray-400 tracking-wide">{language}</span>
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-muted border-b border-border">
+        <span className="text-xs font-mono text-ink-muted tracking-wide">{language}</span>
         <button
           type="button"
           aria-label="Copy code"
           onClick={handleCopy}
           className="
             flex items-center gap-1 px-2 py-0.5 rounded text-xs
-            text-gray-400 hover:text-white hover:bg-gray-700
-            focus:outline-none focus:ring-1 focus:ring-blue-500
+            text-ink-muted hover:text-ink hover:bg-gray-100
+            focus:outline-none focus-visible:ring-1 focus-visible:ring-accent
             transition-colors
           "
         >
@@ -208,14 +208,14 @@ function CodeBlock({
       <pre
         className="
           overflow-x-auto p-4 text-xs leading-5 font-mono
-          text-gray-200 whitespace-pre
+          text-ink whitespace-pre
         "
         style={{ maxHeight: `${maxRows * 1.25 + 1}rem` }}
       >
         {visible}
       </pre>
       {truncated && (
-        <div className="px-4 py-1.5 bg-gray-800/60 border-t border-gray-700 text-xs text-gray-500">
+        <div className="px-4 py-1.5 bg-surface-muted border-t border-border text-xs text-ink-subtle">
           {lines.length - maxRows} more line{lines.length - maxRows !== 1 ? "s" : ""} hidden
         </div>
       )}
@@ -234,8 +234,8 @@ function Pill({
   return (
     <span
       className={`
-        inline-flex items-center gap-1 px-2.5 py-1 rounded-full
-        text-xs font-semibold tracking-wide
+        inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+        text-xs font-medium
         ${className}
       `}
     >
@@ -255,13 +255,13 @@ function ArgRow({ argKey, value }: { argKey: string; value: unknown }) {
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-mono text-blue-400">{argKey}</span>
+      <span className="text-xs font-mono text-blue-700">{argKey}</span>
       {isMultiline ? (
-        <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap break-words bg-gray-950 rounded p-2 border border-gray-800">
+        <pre className="text-xs font-mono text-ink whitespace-pre-wrap break-words bg-surface-muted rounded p-2 border border-border">
           {display}
         </pre>
       ) : (
-        <span className="text-xs font-mono text-green-400 break-all">&quot;{display}&quot;</span>
+        <span className="text-xs font-mono text-gain break-all">&quot;{display}&quot;</span>
       )}
     </div>
   );
@@ -276,7 +276,7 @@ function Section({
   className?: string;
 }) {
   return (
-    <section className={`px-5 py-4 border-b border-gray-700 ${className}`}>
+    <section className={`px-5 py-4 border-b border-border ${className}`}>
       {children}
     </section>
   );
@@ -294,14 +294,14 @@ function Collapsible({
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
-    <section className="px-5 py-4 border-b border-gray-700">
+    <section className="px-5 py-4 border-b border-border">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="
           flex items-center gap-2 w-full text-left
-          text-xs uppercase tracking-widest text-gray-500
-          hover:text-gray-300 focus:outline-none focus:text-gray-300
+          text-xs font-semibold uppercase tracking-wide text-ink-subtle
+          hover:text-ink focus:outline-none focus:text-ink
           transition-colors mb-1
         "
         aria-expanded={open}
@@ -344,17 +344,17 @@ function ToolCallSection({
       <div className="space-y-3">
         {purpose && (
           <div>
-            <p className="text-xs text-gray-500 mb-1.5">Purpose</p>
-            <div className="rounded-lg border border-gray-700 bg-gray-950 p-3">
-              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{purpose}</p>
+            <p className="text-xs text-ink-subtle mb-1.5">Purpose</p>
+            <div className="rounded-lg border border-border bg-surface-muted p-3">
+              <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{purpose}</p>
             </div>
           </div>
         )}
         <CodeBlock code={command} language="bash" maxRows={30} />
         {timeout != null && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-xs text-ink-subtle">
             <Clock className="w-3.5 h-3.5" aria-hidden />
-            <span>Timeout: <span className="text-gray-300 font-mono">{String(timeout)}s</span></span>
+            <span>Timeout: <span className="text-ink font-mono">{String(timeout)}s</span></span>
           </div>
         )}
       </div>
@@ -375,17 +375,17 @@ function ToolCallSection({
       <div className="space-y-3">
         {purpose && (
           <div>
-            <p className="text-xs text-gray-500 mb-1.5">Purpose</p>
-            <div className="rounded-lg border border-gray-700 bg-gray-950 p-3">
-              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{purpose}</p>
+            <p className="text-xs text-ink-subtle mb-1.5">Purpose</p>
+            <div className="rounded-lg border border-border bg-surface-muted p-3">
+              <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{purpose}</p>
             </div>
           </div>
         )}
         <CodeBlock code={code} language="python" maxRows={30} />
         {timeout != null && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-xs text-ink-subtle">
             <Clock className="w-3.5 h-3.5" aria-hidden />
-            <span>Timeout: <span className="text-gray-300 font-mono">{String(timeout)}s</span></span>
+            <span>Timeout: <span className="text-ink font-mono">{String(timeout)}s</span></span>
           </div>
         )}
       </div>
@@ -403,23 +403,23 @@ function ToolCallSection({
       <div className="space-y-3">
         {/* Path */}
         <div>
-          <p className="text-xs text-gray-500 mb-1.5">Path</p>
-          <div className="flex items-center gap-2 bg-gray-950 rounded border border-gray-800 px-3 py-2">
-            <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden />
-            <span className="font-mono text-sm text-amber-300 break-all">{path}</span>
+          <p className="text-xs text-ink-subtle mb-1.5">Path</p>
+          <div className="flex items-center gap-2 bg-surface-muted rounded border border-border px-3 py-2">
+            <FileText className="w-3.5 h-3.5 text-ink-muted shrink-0" aria-hidden />
+            <span className="font-mono text-sm text-warn break-all">{path}</span>
           </div>
         </div>
         {/* Mode pill */}
         {mode && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-xs text-ink-subtle">
             <span>Mode:</span>
-            <Pill className="bg-gray-800 text-gray-300 ring-1 ring-gray-700">{mode}</Pill>
+            <Pill className="bg-gray-100 text-ink-muted">{mode}</Pill>
           </div>
         )}
         {/* Content */}
         {content != null && (
           <div>
-            <p className="text-xs text-gray-500 mb-1.5">Content</p>
+            <p className="text-xs text-ink-subtle mb-1.5">Content</p>
             <CodeBlock
               code={content}
               language={guessLanguageFromPath(path)}
@@ -445,27 +445,27 @@ function ToolCallSection({
       <div className="space-y-3">
         {/* Path */}
         <div>
-          <p className="text-xs text-gray-500 mb-1.5">Path</p>
-          <div className="flex items-center gap-2 bg-gray-950 rounded border border-gray-800 px-3 py-2">
-            <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden />
-            <span className="font-mono text-sm text-amber-300 break-all">{path}</span>
+          <p className="text-xs text-ink-subtle mb-1.5">Path</p>
+          <div className="flex items-center gap-2 bg-surface-muted rounded border border-border px-3 py-2">
+            <FileText className="w-3.5 h-3.5 text-ink-muted shrink-0" aria-hidden />
+            <span className="font-mono text-sm text-warn break-all">{path}</span>
           </div>
         </div>
         {/* Line range */}
         {(startLine != null || endLine != null) && (
-          <div className="flex items-center gap-4 text-xs text-gray-400">
+          <div className="flex items-center gap-4 text-xs text-ink-muted">
             {startLine != null && (
-              <span>Start line: <span className="text-gray-200 font-mono">{String(startLine)}</span></span>
+              <span>Start line: <span className="text-ink font-mono">{String(startLine)}</span></span>
             )}
             {endLine != null && (
-              <span>End line: <span className="text-gray-200 font-mono">{String(endLine)}</span></span>
+              <span>End line: <span className="text-ink font-mono">{String(endLine)}</span></span>
             )}
           </div>
         )}
         {/* Pattern */}
         {pattern && (
           <div>
-            <p className="text-xs text-gray-500 mb-1.5">Pattern</p>
+            <p className="text-xs text-ink-subtle mb-1.5">Pattern</p>
             <CodeBlock code={pattern} language="regex" maxRows={4} />
           </div>
         )}
@@ -484,12 +484,12 @@ function ToolCallSection({
     return (
       <div className="space-y-3">
         <div className="flex items-start gap-2">
-          <Pill className="bg-blue-900/60 text-blue-300 ring-1 ring-blue-500/40 shrink-0 mt-0.5">
+          <Pill className="bg-blue-100 text-blue-800 shrink-0 mt-0.5">
             {method}
           </Pill>
-          <div className="flex items-center gap-2 flex-1 bg-gray-950 rounded border border-gray-800 px-3 py-2 min-w-0">
-            <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden />
-            <span className="font-mono text-sm text-sky-300 break-all">{url}</span>
+          <div className="flex items-center gap-2 flex-1 bg-surface-muted rounded border border-border px-3 py-2 min-w-0">
+            <Globe className="w-3.5 h-3.5 text-ink-muted shrink-0" aria-hidden />
+            <span className="font-mono text-sm text-sky-700 break-all">{url}</span>
           </div>
         </div>
         {renderExtraArgs(input, ["url", "method"])}
@@ -506,13 +506,13 @@ function ToolCallSection({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <BookOpen className="w-3.5 h-3.5 text-purple-400" aria-hidden />
-            <span className="text-xs text-gray-500">Skill</span>
-            <Pill className="bg-purple-900/60 text-purple-300 ring-1 ring-purple-500/40">{skill}</Pill>
+            <BookOpen className="w-3.5 h-3.5 text-purple-700" aria-hidden />
+            <span className="text-xs text-ink-subtle">Skill</span>
+            <Pill className="bg-purple-100 text-purple-800">{skill}</Pill>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Topic</span>
-            <Pill className="bg-gray-800 text-gray-300 ring-1 ring-gray-700">{topic}</Pill>
+            <span className="text-xs text-ink-subtle">Topic</span>
+            <Pill className="bg-gray-100 text-ink-muted">{topic}</Pill>
           </div>
         </div>
         {renderExtraArgs(input, ["skill", "topic"])}
@@ -523,7 +523,7 @@ function ToolCallSection({
   // ── generic fallback ──────────────────────────────────────────────────────
   const entries = Object.entries(input);
   if (entries.length === 0) {
-    return <p className="text-xs text-gray-500 italic">No input arguments.</p>;
+    return <p className="text-xs text-ink-subtle italic">No input arguments.</p>;
   }
   return (
     <div className="space-y-3">
@@ -544,8 +544,8 @@ function renderExtraArgs(
   if (extras.length === 0) return null;
 
   return (
-    <div className="space-y-2.5 border-t border-gray-800 pt-3 mt-1">
-      <p className="text-xs text-gray-600 uppercase tracking-widest">Additional arguments</p>
+    <div className="space-y-2.5 border-t border-border pt-3 mt-1">
+      <p className="text-xs text-ink-subtle font-semibold uppercase tracking-wide">Additional arguments</p>
       {extras.map(([k, v]) => (
         <ArgRow key={k} argKey={k} value={v} />
       ))}
@@ -605,7 +605,7 @@ function AgentProgressDetail({
           <Zap className="w-3 h-3" aria-hidden />
           Narrative Progress
         </p>
-        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+        <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">
           {event.payload.message}
         </p>
       </Section>
@@ -619,31 +619,31 @@ function AgentProgressDetail({
   const FETCH_TOOLS  = new Set(["fetch_url", "http_fetch", "web_fetch", "fetch", "get_url", "request_url"]);
 
   let ToolIcon: React.ElementType = Wrench;
-  let iconCls = "text-gray-400";
-  let pillCls = "bg-gray-800 text-gray-300 ring-1 ring-gray-700";
+  let iconCls = "text-ink-muted";
+  let pillCls = "bg-gray-100 text-ink-muted";
 
   const tool = data.tool || "unknown_tool";
 
   if (BASH_TOOLS.has(tool)) {
     ToolIcon = Terminal;
-    iconCls  = "text-amber-400";
-    pillCls  = "bg-amber-900/50 text-amber-300 ring-1 ring-amber-500/40";
+    iconCls  = "text-warn";
+    pillCls  = "bg-amber-100 text-amber-800";
   } else if (PYTHON_TOOLS.has(tool)) {
     ToolIcon = Terminal;
-    iconCls  = "text-blue-400";
-    pillCls  = "bg-blue-900/50 text-blue-300 ring-1 ring-blue-500/40";
+    iconCls  = "text-blue-700";
+    pillCls  = "bg-blue-100 text-blue-800";
   } else if (FILE_TOOLS.has(tool)) {
     ToolIcon = FileText;
-    iconCls  = "text-emerald-400";
-    pillCls  = "bg-emerald-900/50 text-emerald-300 ring-1 ring-emerald-500/40";
+    iconCls  = "text-gain";
+    pillCls  = "bg-emerald-100 text-emerald-800";
   } else if (FETCH_TOOLS.has(tool)) {
     ToolIcon = Globe;
-    iconCls  = "text-sky-400";
-    pillCls  = "bg-sky-900/50 text-sky-300 ring-1 ring-sky-500/40";
+    iconCls  = "text-sky-700";
+    pillCls  = "bg-sky-100 text-sky-800";
   } else if (tool === "read_skill") {
     ToolIcon = BookOpen;
-    iconCls  = "text-purple-400";
-    pillCls  = "bg-purple-900/50 text-purple-300 ring-1 ring-purple-500/40";
+    iconCls  = "text-purple-700";
+    pillCls  = "bg-purple-100 text-purple-800";
   }
 
   // Extract tool result data for rendering
@@ -657,7 +657,7 @@ function AgentProgressDetail({
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <ToolIcon className={`w-4 h-4 shrink-0 ${iconCls}`} aria-hidden />
-            <p className="text-xs uppercase tracking-widest text-gray-500">Tool Call</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Tool Call</p>
             <Pill className={pillCls}>{tool}</Pill>
           </div>
           <button
@@ -666,9 +666,9 @@ function AgentProgressDetail({
             onClick={handleCopyArgs}
             className="
               flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0
-              text-gray-400 hover:text-white hover:bg-gray-700
-              border border-gray-700 hover:border-gray-600
-              focus:outline-none focus:ring-1 focus:ring-blue-500
+              text-ink-muted hover:text-ink hover:bg-gray-100
+              border border-border hover:border-gray-400
+              focus:outline-none focus-visible:ring-1 focus-visible:ring-accent
               transition-colors
             "
           >
@@ -688,18 +688,18 @@ function AgentProgressDetail({
           <div className="flex items-center gap-2 mb-3">
             {toolResult == null ? (
               <>
-                <span className="inline-block w-2 h-2 rounded-full bg-gray-500 animate-pulse" aria-hidden />
-                <p className="text-xs uppercase tracking-widest text-gray-500">Tool Result — pending</p>
+                <span className="inline-block w-2 h-2 rounded-full bg-gray-400 animate-pulse" aria-hidden />
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Tool Result — pending</p>
               </>
             ) : resultData?.is_error ? (
               <>
-                <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" aria-hidden />
-                <p className="text-xs uppercase tracking-widest text-gray-500">Tool Result — error</p>
+                <XCircle className="w-3.5 h-3.5 text-loss shrink-0" aria-hidden />
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Tool Result — error</p>
               </>
             ) : (
               <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" aria-hidden />
-                <p className="text-xs uppercase tracking-widest text-gray-500">Tool Result</p>
+                <CheckCircle2 className="w-3.5 h-3.5 text-gain shrink-0" aria-hidden />
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Tool Result</p>
               </>
             )}
           </div>
@@ -707,15 +707,15 @@ function AgentProgressDetail({
           {resultData != null && (
             <div className={`rounded-lg border p-3 ${
               resultData.is_error
-                ? "border-red-800/60 bg-red-950/30"
-                : "border-gray-700 bg-gray-950"
+                ? "border-red-200 bg-loss-soft"
+                : "border-border bg-surface-muted"
             }`}>
               {resultData.result ? (
-                <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap break-words leading-5 max-h-48 overflow-y-auto">
+                <pre className="text-xs font-mono text-ink whitespace-pre-wrap break-words leading-5 max-h-48 overflow-y-auto">
                   {resultData.result}
                 </pre>
               ) : (
-                <p className="text-xs text-gray-500 italic">(no output)</p>
+                <p className="text-xs text-ink-subtle italic">(no output)</p>
               )}
             </div>
           )}
@@ -743,45 +743,45 @@ function PlanCreatedDetail({
         {subtasks.map((st) => (
           <div
             key={st.id}
-            className="rounded-lg border border-gray-700 bg-gray-800/40 p-3 space-y-2"
+            className="rounded-lg border border-border bg-surface-muted p-3 space-y-2"
           >
             {/* ID + agent header */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono font-semibold text-blue-400">{st.id}</span>
-              <ArrowRight className="w-3 h-3 text-gray-600 shrink-0" aria-hidden />
-              <span className="text-xs font-mono text-emerald-400">{st.agent_id}</span>
+              <span className="text-xs font-mono font-semibold text-blue-700">{st.id}</span>
+              <ArrowRight className="w-3 h-3 text-ink-subtle shrink-0" aria-hidden />
+              <span className="text-xs font-mono text-gain">{st.agent_id}</span>
               {st.depends_on.length > 0 && (
-                <span className="ml-auto text-xs text-gray-500 shrink-0">
+                <span className="ml-auto text-xs text-ink-subtle shrink-0">
                   depends on:{" "}
                   {st.depends_on.map((d) => (
-                    <span key={d} className="font-mono text-amber-400">{d} </span>
+                    <span key={d} className="font-mono text-warn">{d} </span>
                   ))}
                 </span>
               )}
             </div>
             {/* Instruction */}
-            <p className="text-xs text-gray-300 leading-relaxed">{st.instruction}</p>
+            <p className="text-xs text-ink leading-relaxed">{st.instruction}</p>
             {/* Expected output */}
             {st.expected_output && (
-              <p className="text-xs text-gray-500 italic border-t border-gray-700/60 pt-2 mt-1">
+              <p className="text-xs text-ink-subtle italic border-t border-border pt-2 mt-1">
                 Expected: {st.expected_output}
               </p>
             )}
             {/* Acceptance criteria — checked by an independent verifier */}
             {st.acceptance_criteria && st.acceptance_criteria.length > 0 && (
-              <div className="border-t border-gray-700/60 pt-2 mt-1">
-                <p className="text-xs text-teal-400 flex items-center gap-1 mb-1">
+              <div className="border-t border-border pt-2 mt-1">
+                <p className="text-xs text-gain flex items-center gap-1 mb-1">
                   <ShieldCheck className="w-3 h-3" aria-hidden /> Acceptance criteria (independently verified)
                 </p>
-                <ul className="text-xs text-gray-400 list-disc pl-5 space-y-0.5">
+                <ul className="text-xs text-ink-muted list-disc pl-5 space-y-0.5">
                   {st.acceptance_criteria.map((c) => <li key={c}>{c}</li>)}
                 </ul>
               </div>
             )}
             {(st.model_tier || st.thinking_effort) && (
-              <p className="text-xs text-gray-500">
-                {st.model_tier && <span className="mr-3">tier: <span className="font-mono text-gray-300">{st.model_tier}</span></span>}
-                {st.thinking_effort && <span>effort: <span className="font-mono text-gray-300">{st.thinking_effort}</span></span>}
+              <p className="text-xs text-ink-subtle">
+                {st.model_tier && <span className="mr-3">tier: <span className="font-mono text-ink">{st.model_tier}</span></span>}
+                {st.thinking_effort && <span>effort: <span className="font-mono text-ink">{st.thinking_effort}</span></span>}
               </p>
             )}
           </div>
@@ -805,15 +805,15 @@ function TaskDispatchedDetail({
         <ArrowRight className="w-3 h-3" aria-hidden />
         Dispatch Mapping
       </p>
-      <div className="flex items-center gap-3 bg-gray-800/50 rounded-lg border border-gray-700 px-4 py-3">
+      <div className="flex items-center gap-3 bg-surface-muted rounded-lg border border-border px-4 py-3">
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-500 mb-1">Subtask ID</p>
-          <p className="font-mono text-sm text-blue-300 truncate">{subtask_id}</p>
+          <p className="text-xs text-ink-subtle mb-1">Subtask ID</p>
+          <p className="font-mono text-sm text-blue-700 truncate">{subtask_id}</p>
         </div>
-        <ArrowRight className="w-4 h-4 text-gray-500 shrink-0" aria-hidden />
+        <ArrowRight className="w-4 h-4 text-ink-subtle shrink-0" aria-hidden />
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-500 mb-1">Task ID</p>
-          <p className="font-mono text-sm text-emerald-300 truncate" title={task_id}>
+          <p className="text-xs text-ink-subtle mb-1">Task ID</p>
+          <p className="font-mono text-sm text-gain truncate" title={task_id}>
             {task_id}
           </p>
         </div>
@@ -845,18 +845,18 @@ function TaskResultDetail({
     <Section>
       {/* Status strip */}
       <div className="flex items-center gap-2 mb-4">
-        {isError   && <XCircle      className="w-4 h-4 text-red-400 shrink-0"     aria-hidden />}
-        {isPartial && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0"  aria-hidden />}
-        {!isError && !isPartial && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden />}
+        {isError   && <XCircle      className="w-4 h-4 text-loss shrink-0"     aria-hidden />}
+        {isPartial && <AlertTriangle className="w-4 h-4 text-warn shrink-0"  aria-hidden />}
+        {!isError && !isPartial && <CheckCircle2 className="w-4 h-4 text-gain shrink-0" aria-hidden />}
         <p className={SECTION_LABEL + " mb-0"}>
           {isError ? "Task Failed" : isPartial ? "Partial Result" : "Task Output"}
         </p>
         {status && (
           <Pill
             className={
-              isError   ? "bg-red-900/60 text-red-300 ring-1 ring-red-500/40 ml-auto"
-            : isPartial ? "bg-amber-900/60 text-amber-300 ring-1 ring-amber-500/40 ml-auto"
-            : "bg-emerald-900/60 text-emerald-300 ring-1 ring-emerald-500/40 ml-auto"
+              isError   ? "bg-red-100 text-red-800 ml-auto"
+            : isPartial ? "bg-amber-100 text-amber-800 ml-auto"
+            : "bg-emerald-100 text-emerald-800 ml-auto"
             }
           >
             {status}
@@ -866,9 +866,9 @@ function TaskResultDetail({
 
       {/* Error message */}
       {error && (
-        <div className="mb-3 rounded-lg border border-red-800/60 bg-red-950/30 px-4 py-3">
-          <p className="text-xs text-red-400 font-semibold mb-1">Error</p>
-          <p className="text-sm text-red-300 leading-relaxed whitespace-pre-wrap font-mono break-words">
+        <div className="mb-3 rounded-lg border border-red-200 bg-loss-soft px-4 py-3">
+          <p className="text-xs text-loss font-semibold mb-1">Error</p>
+          <p className="text-sm text-loss leading-relaxed whitespace-pre-wrap font-mono break-words">
             {error}
           </p>
         </div>
@@ -877,9 +877,9 @@ function TaskResultDetail({
       {/* Output text */}
       {output?.text && (
         <div className="mb-3">
-          <p className="text-xs text-gray-500 mb-1.5">Output</p>
-          <div className="rounded-lg border border-gray-700 bg-gray-950 p-3 max-h-48 overflow-y-auto">
-            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-mono break-words text-xs">
+          <p className="text-xs text-ink-subtle mb-1.5">Output</p>
+          <div className="rounded-lg border border-border bg-surface-muted p-3 max-h-48 overflow-y-auto">
+            <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap font-mono break-words text-xs">
               {output.text}
             </p>
           </div>
@@ -889,8 +889,8 @@ function TaskResultDetail({
       {/* Structured output */}
       {output?.structured && Object.keys(output.structured).length > 0 && (
         <div className="mb-3">
-          <p className="text-xs text-gray-500 mb-1.5">Structured Output</p>
-          <div className="rounded-lg border border-gray-700 bg-gray-950 p-3 font-mono text-xs max-h-40 overflow-y-auto">
+          <p className="text-xs text-ink-subtle mb-1.5">Structured Output</p>
+          <div className="rounded-lg border border-border bg-surface-muted p-3 font-mono text-xs max-h-40 overflow-y-auto">
             {renderJson(output.structured, 1)}
           </div>
         </div>
@@ -899,23 +899,23 @@ function TaskResultDetail({
       {/* Independent verification (session-log traces carry it on the result) */}
       {asVerification(data.verification) && (
         <div className="mb-3">
-          <p className="text-xs text-gray-500 mb-1.5">Verification</p>
+          <p className="text-xs text-ink-subtle mb-1.5">Verification</p>
           <VerificationBlock verification={asVerification(data.verification)!} />
         </div>
       )}
       {typeof data.checkpoint === "string" && (
-        <p className="text-xs text-gray-500 mb-3">
-          Checkpoint <span className="font-mono text-gray-300">{data.checkpoint.slice(0, 12)}</span>
+        <p className="text-xs text-ink-subtle mb-3">
+          Checkpoint <span className="font-mono text-ink">{data.checkpoint.slice(0, 12)}</span>
         </p>
       )}
 
       {/* Stats bar */}
       {(tokens != null || duration != null) && (
-        <div className="flex items-center gap-5 mt-3 pt-3 border-t border-gray-800 text-xs text-gray-500">
+        <div className="flex items-center gap-5 mt-3 pt-3 border-t border-border text-xs text-ink-subtle">
           {tokens != null && (
             <span>
               Tokens:{" "}
-              <span className="text-gray-300 font-mono font-semibold">
+              <span className="text-ink font-mono font-semibold">
                 {tokens.toLocaleString()}
               </span>
             </span>
@@ -923,7 +923,7 @@ function TaskResultDetail({
           {duration != null && (
             <span>
               Duration:{" "}
-              <span className="text-gray-300 font-mono font-semibold">
+              <span className="text-ink font-mono font-semibold">
                 {duration < 1000
                   ? `${duration}ms`
                   : `${(duration / 1000).toFixed(2)}s`}
@@ -940,26 +940,26 @@ function TaskResultDetail({
 function VerificationBlock({ verification }: { verification: Verification }) {
   const { passed, checks, summary, repairs } = verification;
   const Icon = passed === true ? ShieldCheck : passed === false ? ShieldAlert : ShieldQuestion;
-  const tone = passed === true ? "text-teal-400" : passed === false ? "text-red-400" : "text-amber-400";
+  const tone = passed === true ? "text-gain" : passed === false ? "text-loss" : "text-warn";
   const label = passed === true ? "Passed" : passed === false ? "Failed" : "Inconclusive (counted as a pass)";
   return (
     <div className="space-y-2">
       <p className={`text-sm font-semibold flex items-center gap-2 ${tone}`}>
         <Icon className="w-4 h-4" aria-hidden /> {label}
-        {repairs > 0 && <span className="text-xs font-normal text-gray-400">after {repairs} repair round{repairs !== 1 ? "s" : ""}</span>}
+        {repairs > 0 && <span className="text-xs font-normal text-ink-muted">after {repairs} repair round{repairs !== 1 ? "s" : ""}</span>}
       </p>
-      {summary && <p className="text-xs text-gray-400">{summary}</p>}
+      {summary && <p className="text-xs text-ink-muted">{summary}</p>}
       {checks.length > 0 && (
         <ul className="space-y-1.5">
           {checks.map((c) => (
-            <li key={c.criterion} className="rounded-md border border-gray-700 bg-gray-800/40 px-3 py-2">
+            <li key={c.criterion} className="rounded-md border border-border bg-surface-muted px-3 py-2">
               <p className="text-xs flex items-start gap-2">
                 {c.met
-                  ? <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0 mt-0.5" aria-hidden />
-                  : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" aria-hidden />}
-                <span className="text-gray-200">{c.criterion}</span>
+                  ? <CheckCircle2 className="w-3.5 h-3.5 text-gain shrink-0 mt-0.5" aria-hidden />
+                  : <XCircle className="w-3.5 h-3.5 text-loss shrink-0 mt-0.5" aria-hidden />}
+                <span className="text-ink">{c.criterion}</span>
               </p>
-              {c.evidence && <p className="text-xs text-gray-500 pl-5 mt-0.5">{c.evidence}</p>}
+              {c.evidence && <p className="text-xs text-ink-subtle pl-5 mt-0.5">{c.evidence}</p>}
             </li>
           ))}
         </ul>
@@ -1004,9 +1004,9 @@ function SessionFactDetail({ event }: { event: TraceEvent }) {
     return (
       <Section>
         <p className={SECTION_LABEL}><GitCommitHorizontal className="w-3 h-3" aria-hidden /> Workspace checkpoint</p>
-        <p className="text-xs text-gray-400 mb-2">Commit <span className="font-mono text-gray-200">{String(data["sha"] ?? "")}</span> in the run's shadow repository.</p>
-        <p className="text-xs text-gray-500 mb-1">Changed files ({changed.length})</p>
-        <ul className="text-xs font-mono text-gray-300 space-y-0.5 max-h-48 overflow-y-auto">{changed.map((p) => <li key={p}>{p}</li>)}</ul>
+        <p className="text-xs text-ink-muted mb-2">Commit <span className="font-mono text-ink">{String(data["sha"] ?? "")}</span> in the run's shadow repository.</p>
+        <p className="text-xs text-ink-subtle mb-1">Changed files ({changed.length})</p>
+        <ul className="text-xs font-mono text-ink space-y-0.5 max-h-48 overflow-y-auto">{changed.map((p) => <li key={p}>{p}</li>)}</ul>
       </Section>
     );
   }
@@ -1015,8 +1015,8 @@ function SessionFactDetail({ event }: { event: TraceEvent }) {
     return (
       <Section>
         <p className={SECTION_LABEL}><Undo2 className="w-3 h-3" aria-hidden /> Rolled back before the retry</p>
-        <p className="text-xs text-gray-400 mb-2">Files the failed attempt wrote, restored to the subtask's starting snapshot (new files removed).</p>
-        <ul className="text-xs font-mono text-gray-300 space-y-0.5">{paths.map((p) => <li key={p}>{p}</li>)}</ul>
+        <p className="text-xs text-ink-muted mb-2">Files the failed attempt wrote, restored to the subtask's starting snapshot (new files removed).</p>
+        <ul className="text-xs font-mono text-ink space-y-0.5">{paths.map((p) => <li key={p}>{p}</li>)}</ul>
       </Section>
     );
   }
@@ -1028,9 +1028,9 @@ function SessionFactDetail({ event }: { event: TraceEvent }) {
         <ul className="space-y-1.5">
           {micro.map((m) => (
             <li key={m.id} className="text-xs">
-              <span className="font-mono text-sky-400">{m.id}</span>
-              {m.depends_on && m.depends_on.length > 0 && <span className="text-gray-500"> ← {m.depends_on.join(", ")}</span>}
-              <p className="text-gray-400 line-clamp-3">{m.instruction}</p>
+              <span className="font-mono text-sky-700">{m.id}</span>
+              {m.depends_on && m.depends_on.length > 0 && <span className="text-ink-subtle"> ← {m.depends_on.join(", ")}</span>}
+              <p className="text-ink-muted line-clamp-3">{m.instruction}</p>
             </li>
           ))}
         </ul>
@@ -1041,8 +1041,8 @@ function SessionFactDetail({ event }: { event: TraceEvent }) {
     return (
       <Section>
         <p className={SECTION_LABEL}><CircleHelp className="w-3 h-3" aria-hidden /> Unrecognised event</p>
-        <p className="text-xs text-gray-400">
-          Type <span className="font-mono text-gray-200">{String(data["original_type"] ?? "?")}</span> is newer than this
+        <p className="text-xs text-ink-muted">
+          Type <span className="font-mono text-ink">{String(data["original_type"] ?? "?")}</span> is newer than this
           viewer. It is shown as-is; see the full payload below.
         </p>
       </Section>
@@ -1068,9 +1068,9 @@ function RunSummaryDetail({ event }: { event: TraceEvent }) {
   return (
     <Section>
       <div className="flex items-center gap-2 mb-4">
-        {isError   && <XCircle      className="w-4 h-4 text-red-400"     aria-hidden />}
-        {isBudget  && <AlertTriangle className="w-4 h-4 text-pink-400"   aria-hidden />}
-        {isSuccess && <CheckCircle2 className="w-4 h-4 text-green-400"   aria-hidden />}
+        {isError   && <XCircle      className="w-4 h-4 text-loss"     aria-hidden />}
+        {isBudget  && <AlertTriangle className="w-4 h-4 text-loss"   aria-hidden />}
+        {isSuccess && <CheckCircle2 className="w-4 h-4 text-gain"   aria-hidden />}
         <p className={SECTION_LABEL + " mb-0"}>
           {isError ? "Run Error" : isBudget ? "Budget Exceeded" : "Run Summary"}
         </p>
@@ -1078,28 +1078,28 @@ function RunSummaryDetail({ event }: { event: TraceEvent }) {
 
       {(error || reason) && (
         <div className={`mb-3 rounded-lg border px-4 py-3 ${
-          isError  ? "border-red-800/60 bg-red-950/30"
-          : isBudget ? "border-pink-800/60 bg-pink-950/30"
-          : "border-gray-700 bg-gray-800/40"
+          isError  ? "border-red-200 bg-loss-soft"
+          : isBudget ? "border-pink-200 bg-pink-50"
+          : "border-border bg-surface-muted"
         }`}>
           <p className={`text-xs font-semibold mb-1 ${
-            isError ? "text-red-400" : isBudget ? "text-pink-400" : "text-gray-400"
+            isError ? "text-loss" : isBudget ? "text-loss" : "text-ink-muted"
           }`}>
             {error ? "Error" : "Reason"}
           </p>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words font-mono text-gray-300">
+          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words font-mono text-ink">
             {error ?? reason}
           </p>
         </div>
       )}
 
       {(tokens != null || duration != null) && (
-        <div className="flex items-center gap-5 text-xs text-gray-500">
+        <div className="flex items-center gap-5 text-xs text-ink-subtle">
           {tokens != null && (
-            <span>Total tokens: <span className="text-gray-300 font-mono font-semibold">{tokens.toLocaleString()}</span></span>
+            <span>Total tokens: <span className="text-ink font-mono font-semibold">{tokens.toLocaleString()}</span></span>
           )}
           {duration != null && (
-            <span>Duration: <span className="text-gray-300 font-mono font-semibold">
+            <span>Duration: <span className="text-ink font-mono font-semibold">
               {duration < 1000 ? `${duration}ms` : `${(duration / 1000).toFixed(2)}s`}
             </span></span>
           )}
@@ -1183,14 +1183,14 @@ export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
       aria-label={`Event detail: ${event.type}`}
     >
         {/* ── Header ────────────────────────────────────────────────────── */}
-        <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-700 sticky top-0 bg-gray-900 z-10">
+        <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border sticky top-0 bg-surface z-10">
           <div className="flex items-center gap-3 min-w-0">
             <span
-              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide ${meta.badge}`}
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${meta.badge}`}
             >
               {meta.label}
             </span>
-            <span className="text-gray-300 text-sm font-medium truncate">Event #{event.seq}</span>
+            <span className="text-ink text-sm font-medium truncate">Event #{event.seq}</span>
           </div>
           <button
             type="button"
@@ -1198,8 +1198,8 @@ export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
             onClick={onClose}
             className="
               flex items-center justify-center w-8 h-8 rounded-md shrink-0
-              text-gray-400 hover:text-white hover:bg-gray-700
-              focus:outline-none focus:ring-2 focus:ring-blue-500
+              text-ink-muted hover:text-ink hover:bg-gray-100
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-accent
               transition-colors
             "
           >
@@ -1217,8 +1217,8 @@ export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
 
         {/* ── Message summary (compact when a richer section follows) ─────── */}
         <Section>
-          <p className="text-xs uppercase tracking-widest text-gray-500 mb-1.5">Message</p>
-          <p className="text-sm text-gray-200 leading-relaxed">{event.payload.message}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle mb-1.5">Message</p>
+          <p className="text-sm text-ink leading-relaxed">{event.payload.message}</p>
         </Section>
 
         {/* ── Event-specific rich sections ─────────────────────────────────── */}
@@ -1265,9 +1265,9 @@ export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
           <div
             className="
               overflow-auto rounded-lg
-              bg-gray-950 border border-gray-800
+              bg-surface-muted border border-border
               p-4 font-mono text-xs leading-5
-              text-gray-300 max-h-96
+              text-ink max-h-96
             "
           >
             {renderJson(fullPayload, 1)}
@@ -1275,7 +1275,7 @@ export function EventDetail({ event, onClose, allEvents }: EventDetailProps) {
         </Collapsible>
 
         {/* ── Footer — copy JSON ────────────────────────────────────────── */}
-        <footer className="px-5 py-3 border-t border-gray-700 mt-auto bg-gray-900">
+        <footer className="px-5 py-3 border-t border-border mt-auto bg-surface">
           <CopyButton json={fullPayload} />
         </footer>
     </aside>
@@ -1302,15 +1302,15 @@ function CopyButton({ json }: { json: unknown }) {
       type="button"
       onClick={handleCopy}
       className="
-        w-full py-2 rounded-md text-sm font-medium
-        bg-gray-800 hover:bg-gray-700
-        text-gray-300 hover:text-white
-        border border-gray-700
-        focus:outline-none focus:ring-2 focus:ring-blue-500
+        w-full h-8 rounded-md text-sm font-medium
+        bg-surface hover:bg-surface-muted
+        text-ink hover:text-ink
+        border border-border-strong
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-accent
         transition-colors
       "
     >
-      {copied ? "✓ Copied!" : "Copy JSON"}
+      {copied ? "Copied" : "Copy JSON"}
     </button>
   );
 }

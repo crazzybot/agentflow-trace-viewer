@@ -15,6 +15,7 @@ import {
 } from "../api/agentflow";
 import type { CampaignLimitsUpdate, CampaignStatus, CampaignView, Feature, FeatureStatus } from "../types/campaigns";
 import { workspaceNameError } from "../utils/workspace";
+import { ThemeSwitch } from "./ThemeSwitch";
 
 type CampaignRoute = { page: "campaigns" } | { page: "new-campaign" } | { page: "campaign"; campaignId: string };
 
@@ -31,10 +32,10 @@ const CAMPAIGN_BADGE: Record<CampaignStatus, string> = {
 };
 
 const FEATURE_ICON: Record<FeatureStatus, React.ReactNode> = {
-  passing: <CheckCircle2 className="w-4 h-4 text-emerald-500" aria-hidden="true" />,
-  failing: <XCircle className="w-4 h-4 text-red-500" aria-hidden="true" />,
-  blocked: <CircleSlash className="w-4 h-4 text-gray-400" aria-hidden="true" />,
-  pending: <CircleDashed className="w-4 h-4 text-gray-400" aria-hidden="true" />,
+  passing: <CheckCircle2 className="w-4 h-4 text-gain" aria-hidden="true" />,
+  failing: <XCircle className="w-4 h-4 text-loss" aria-hidden="true" />,
+  blocked: <CircleSlash className="w-4 h-4 text-ink-subtle" aria-hidden="true" />,
+  pending: <CircleDashed className="w-4 h-4 text-ink-subtle" aria-hidden="true" />,
 };
 
 function money(value: number | null | undefined): string {
@@ -58,6 +59,7 @@ function Progress({ view }: { view: CampaignView }) {
 function Shell({ navigate, children }: { navigate: (hash: string) => void; children: React.ReactNode }) {
   return (
     <main className="app-hero cmp-shell">
+      <ThemeSwitch className="app-hero-theme" />
       <div className="app-brand">
         <Activity className="app-brand-icon" aria-hidden="true" />
         <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
@@ -333,8 +335,8 @@ function FeatureRow({
               const ev = feature.evidence.find((e) => e.criterion === check);
               return (
                 <li key={check}>
-                  {ev ? (ev.met ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" /> : <XCircle className="w-3.5 h-3.5 text-red-500" aria-hidden="true" />)
-                      : <CircleDashed className="w-3.5 h-3.5 text-gray-400" aria-hidden="true" />}
+                  {ev ? (ev.met ? <CheckCircle2 className="w-3.5 h-3.5 text-gain" aria-hidden="true" /> : <XCircle className="w-3.5 h-3.5 text-loss" aria-hidden="true" />)
+                      : <CircleDashed className="w-3.5 h-3.5 text-ink-subtle" aria-hidden="true" />}
                   <span>{check}</span>
                   {ev?.evidence && <span className="cmp-evidence">— {ev.evidence}</span>}
                 </li>
