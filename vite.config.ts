@@ -11,6 +11,12 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  server: {
+    port: 5175,
+  },
+  preview: {
+    port: 5175,
+  },
   build: {
     target: "es2022",
     sourcemap: true,

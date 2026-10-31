@@ -3,4 +3,4 @@
  * (e.g. `VITE_AGENTFLOW_API_URL=http://localhost:8000 npm run dev`).
  */
 export const AGENTFLOW_API_URL: string =
-  (import.meta.env?.VITE_AGENTFLOW_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:8001";
+  (import.meta.env?.VITE_AGENTFLOW_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:8002";
