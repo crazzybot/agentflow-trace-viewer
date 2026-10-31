@@ -53,13 +53,13 @@ export function ArtifactsViewer({ runId }: ArtifactsViewerProps) {
       <aside className="artifacts-sidebar">
         {!artifacts && !listError && (
           <div className="artifacts-sidebar-state">
-            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" aria-hidden="true" />
+            <Loader2 className="w-4 h-4 animate-spin text-accent" aria-hidden="true" />
             <span>Loading artifacts…</span>
           </div>
         )}
         {listError && (
           <div className="artifacts-sidebar-state artifacts-sidebar-state--error">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" aria-hidden="true" />
+            <AlertCircle className="w-4 h-4 text-loss shrink-0" aria-hidden="true" />
             <span>{listError}</span>
           </div>
         )}
@@ -81,9 +81,9 @@ export function ArtifactsViewer({ runId }: ArtifactsViewerProps) {
                     onClick={() => handleSelect(a)}
                   >
                     {isMd ? (
-                      <FileText className="w-3.5 h-3.5 shrink-0 text-indigo-400" aria-hidden="true" />
+                      <FileText className="w-3.5 h-3.5 shrink-0 text-accent" aria-hidden="true" />
                     ) : (
-                      <File className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                      <File className="w-3.5 h-3.5 shrink-0 text-ink-subtle" aria-hidden="true" />
                     )}
                     <span className="artifacts-item-name">{a.name}</span>
                     {a.path !== a.name && (
@@ -103,13 +103,13 @@ export function ArtifactsViewer({ runId }: ArtifactsViewerProps) {
         )}
         {selected && contentLoading && (
           <div className="artifacts-content-state">
-            <Loader2 className="w-5 h-5 animate-spin text-indigo-400" aria-hidden="true" />
+            <Loader2 className="w-5 h-5 animate-spin text-accent" aria-hidden="true" />
             <span>Loading…</span>
           </div>
         )}
         {selected && contentError && (
           <div className="artifacts-content-state artifacts-content-state--error">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" aria-hidden="true" />
+            <AlertCircle className="w-4 h-4 text-loss shrink-0" aria-hidden="true" />
             <span>{contentError}</span>
           </div>
         )}

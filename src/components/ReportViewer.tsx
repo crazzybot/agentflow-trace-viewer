@@ -100,7 +100,7 @@ export function ReportViewer({ markdown, isLoading = false, error = null }: Repo
   if (isLoading) {
     return (
       <div className="report-loading">
-        <Loader2 className="w-6 h-6 animate-spin text-indigo-400" aria-hidden="true" />
+        <Loader2 className="w-6 h-6 animate-spin text-accent" aria-hidden="true" />
         <span>Loading report…</span>
       </div>
     );
@@ -109,7 +109,7 @@ export function ReportViewer({ markdown, isLoading = false, error = null }: Repo
   if (error) {
     return (
       <div className="report-error">
-        <AlertCircle className="w-5 h-5 shrink-0 text-red-400" aria-hidden="true" />
+        <AlertCircle className="w-5 h-5 shrink-0 text-loss" aria-hidden="true" />
         <span>{error}</span>
       </div>
     );

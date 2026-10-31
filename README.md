@@ -9,11 +9,11 @@ reports and artifacts, step through workspace checkpoints, and drive long-horizo
 
 ```bash
 npm install
-npm run dev                                              # http://localhost:5173
+npm run dev                                              # http://localhost:5175
 VITE_AGENTFLOW_API_URL=http://localhost:8000 npm run dev # point at another server
 ```
 
-`VITE_AGENTFLOW_API_URL` defaults to `http://localhost:8001`. The AgentFlow server allows
+`VITE_AGENTFLOW_API_URL` defaults to `http://localhost:8002`. The AgentFlow server allows
 CORS from `localhost:3000` and `:5173`–`:5175`.
 
 ## What it shows

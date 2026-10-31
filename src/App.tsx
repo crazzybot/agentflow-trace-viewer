@@ -41,6 +41,7 @@ import { StreamingControlBar } from "./components/StreamingControlBar";
 import { CheckpointsViewer } from "./components/CheckpointsViewer";
 import { CampaignsPage } from "./components/CampaignsPage";
 import "./App.css";
+import { ThemeSwitch } from "./components/ThemeSwitch";
 
 // ---------------------------------------------------------------------------
 // Hash Router
@@ -699,6 +700,7 @@ export default function App() {
     const isLoading = appState.status === "loading";
     return (
       <main className="app-hero">
+        <ThemeSwitch className="app-hero-theme" />
         <div className="app-brand">
           <Activity className="app-brand-icon" aria-hidden="true" />
           <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
@@ -710,9 +712,9 @@ export default function App() {
         {appState.status === "error" && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 w-full max-w-2xl rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"
+            className="flex items-start gap-2 w-full rounded-md bg-red-50 border border-red-300 p-3 text-sm text-red-800"
           >
-            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" aria-hidden="true" />
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-loss" aria-hidden="true" />
             <span>{appState.message}</span>
           </div>
         )}
@@ -748,6 +750,7 @@ export default function App() {
   if (appState.status === "new-run") {
     return (
       <main className="app-hero">
+        <ThemeSwitch className="app-hero-theme" />
         <div className="app-brand">
           <Activity className="app-brand-icon" aria-hidden="true" />
           <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
@@ -769,6 +772,7 @@ export default function App() {
   if (appState.status === "followup") {
     return (
       <main className="app-hero">
+        <ThemeSwitch className="app-hero-theme" />
         <div className="app-brand">
           <Activity className="app-brand-icon" aria-hidden="true" />
           <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
@@ -807,12 +811,12 @@ export default function App() {
             {awaiting ? (
               <span className="stream-awaiting-badge" aria-label="Awaiting user input">
                 <span className="stream-awaiting-dot" aria-hidden="true" />
-                PAUSED
+                Paused
               </span>
             ) : (
               <span className="stream-live-badge" aria-label="Live stream active">
                 <span className="stream-live-dot" aria-hidden="true" />
-                LIVE
+                Live
               </span>
             )}
             {task ? (
@@ -839,14 +843,18 @@ export default function App() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleReset}
-            className="app-topbar-reload"
-            aria-label="Close stream"
-          >
-            <XIcon className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
+          <div className="app-topbar-actions">
+            <ThemeSwitch />
+            <button
+              type="button"
+              onClick={handleReset}
+              className="app-topbar-reload"
+              aria-label="Close stream"
+              title="Close stream"
+            >
+              <XIcon className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
         {/* Status bar / human-input panel replaces the filter bar during streaming */}
@@ -966,9 +974,9 @@ export default function App() {
 
         <div className="app-topbar-file">
           {source.type === "file" ? (
-            <FileJson2 className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+            <FileJson2 className="w-4 h-4 text-ink-subtle shrink-0" aria-hidden="true" />
           ) : (
-            <Server className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+            <Server className="w-4 h-4 text-ink-subtle shrink-0" aria-hidden="true" />
           )}
           <span
             className="app-topbar-filename"
@@ -1049,38 +1057,43 @@ export default function App() {
           </div>
         )}
 
-        {source.type === "api" && source.resumable && (
+        <div className="app-topbar-actions">
+          {source.type === "api" && source.resumable && (
+            <button
+              type="button"
+              onClick={handleResume}
+              disabled={appState.resuming}
+              className="app-topbar-resume-btn"
+              title={appState.resumeError ?? "This run was interrupted by a restart. Resume it from where it stopped."}
+            >
+              <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+              {appState.resuming ? "Resuming…" : appState.resumeError ? "Resume failed" : "Resume"}
+            </button>
+          )}
+
+          {source.type === "api" && (
+            <button
+              type="button"
+              onClick={handleFollowupOpen}
+              className="app-topbar-followup-btn"
+              aria-label="Start follow-up run"
+              title="Start follow-up run"
+            >
+              <PlusCircle className="w-4 h-4" aria-hidden="true" />
+            </button>
+          )}
+
+          <ThemeSwitch />
           <button
             type="button"
-            onClick={handleResume}
-            disabled={appState.resuming}
-            className="app-topbar-resume-btn"
-            title={appState.resumeError ?? "This run was interrupted by a restart. Resume it from where it stopped."}
+            onClick={handleReset}
+            className="app-topbar-reload"
+            aria-label="Close trace and load another"
+            title="Close trace and load another"
           >
-            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-            {appState.resuming ? "Resuming…" : appState.resumeError ? "Resume failed" : "Resume"}
+            <XIcon className="w-4 h-4" aria-hidden="true" />
           </button>
-        )}
-
-        {source.type === "api" && (
-          <button
-            type="button"
-            onClick={handleFollowupOpen}
-            className="app-topbar-followup-btn"
-            aria-label="Start follow-up run"
-          >
-            <PlusCircle className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={handleReset}
-          className="app-topbar-reload"
-          aria-label="Close trace and load another"
-        >
-          <XIcon className="w-3.5 h-3.5" aria-hidden="true" />
-        </button>
+        </div>
       </header>
 
       {/* Filter bar — events view only */}

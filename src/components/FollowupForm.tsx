@@ -61,7 +61,7 @@ export function FollowupForm({
       <form onSubmit={handleSubmit} className="new-run-body">
         <div className="followup-context-block">
           <div className="followup-context-header">
-            <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" aria-hidden="true" />
+            <ArrowUpRight className="w-3.5 h-3.5 text-accent shrink-0" aria-hidden="true" />
             <span className="followup-context-label">Continuing from</span>
             <span className="followup-context-run-chip" title={priorRunId}>{displayName}</span>
           </div>

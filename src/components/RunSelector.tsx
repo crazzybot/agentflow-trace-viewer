@@ -70,7 +70,7 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
     <div className="run-selector">
       <div className="run-selector-header">
         <div className="run-selector-title">
-          <History className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+          <History className="w-4 h-4 text-accent" aria-hidden="true" />
           <span>Recent Runs</span>
         </div>
         <div className="run-selector-header-actions">
@@ -101,17 +101,17 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
       <div className="run-selector-body">
         {fetchState.status === "loading" && (
           <div className="run-selector-status">
-            <Loader2 className="w-5 h-5 animate-spin text-indigo-400" aria-hidden="true" />
+            <Loader2 className="w-5 h-5 animate-spin text-accent" aria-hidden="true" />
             <span>Fetching runs…</span>
           </div>
         )}
 
         {fetchState.status === "error" && (
           <div className="run-selector-offline">
-            <WifiOff className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
+            <WifiOff className="w-5 h-5 text-ink-subtle shrink-0 mt-0.5" aria-hidden="true" />
             <div>
-              <p className="text-sm font-semibold text-slate-600">Service unavailable</p>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-sm font-semibold text-ink-muted">Service unavailable</p>
+              <p className="text-xs text-ink-subtle mt-0.5">
                 Start the agentflow service to browse historical runs
               </p>
             </div>
@@ -120,7 +120,7 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
 
         {fetchState.status === "loaded" && fetchState.runs.length === 0 && (
           <div className="run-selector-empty">
-            <p className="text-sm text-slate-500">No runs found</p>
+            <p className="text-sm text-ink-subtle">No runs found</p>
           </div>
         )}
 

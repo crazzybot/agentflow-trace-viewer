@@ -1,9 +1,7 @@
 import React from "react";
 import mermaid from "mermaid";
 import { Loader2, AlertCircle } from "lucide-react";
-
-// Initialise once at module load — never call startOnLoad inside a SPA.
-mermaid.initialize({ startOnLoad: false, theme: "default" });
+import { useResolvedTheme } from "../utils/theme";
 
 interface MermaidDiagramProps {
   chart: string;
@@ -40,10 +38,13 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [state, setState] = React.useState<RenderState>({ status: "loading" });
+  const theme = useResolvedTheme();
 
   React.useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
+    // Never startOnLoad inside a SPA; re-initialise per render so the diagram follows the theme.
+    mermaid.initialize({ startOnLoad: false, theme: theme === "dark" ? "dark" : "neutral" });
 
     // Create a detached off-screen element and attach it to document.body.
     // Passing it as the third argument to mermaid.render() tells mermaid v11
@@ -105,7 +106,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     };
     // chart and id are both stable/derived from props — re-run only when chart changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chart]);
+  }, [chart, theme]);
 
   if (state.status === "loading") {
     return (

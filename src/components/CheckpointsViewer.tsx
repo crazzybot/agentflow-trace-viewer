@@ -51,13 +51,13 @@ export function CheckpointsViewer({ runId, workspace }: CheckpointsViewerProps) 
       <aside className="artifacts-sidebar">
         {!checkpoints && !error && (
           <div className="artifacts-sidebar-state">
-            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" aria-hidden="true" />
+            <Loader2 className="w-4 h-4 animate-spin text-accent" aria-hidden="true" />
             <span>Loading checkpoints…</span>
           </div>
         )}
         {error && (
           <div className="artifacts-sidebar-state artifacts-sidebar-state--error">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" aria-hidden="true" />
+            <AlertCircle className="w-4 h-4 text-loss shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
@@ -78,7 +78,7 @@ export function CheckpointsViewer({ runId, workspace }: CheckpointsViewerProps) 
                   className={`artifacts-item ${selectedSha === c.sha ? "artifacts-item--active" : ""}`}
                   onClick={() => setSelectedSha(c.sha)}
                 >
-                  <GitCommitHorizontal className="w-3.5 h-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                  <GitCommitHorizontal className="w-3.5 h-3.5 shrink-0 text-ink-subtle" aria-hidden="true" />
                   <span className="artifacts-item-name">{c.label}</span>
                   <span className="artifacts-item-path">
                     {c.sha.slice(0, 7)} · {c.changed.length} file{c.changed.length !== 1 ? "s" : ""} ·{" "}

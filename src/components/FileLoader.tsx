@@ -89,7 +89,7 @@ export function FileLoader({ onLoad, isLoading = false, error = null }: FileLoad
   const busy = isLoading || isFetchingSample;
 
   return (
-    <div className="flex flex-col items-center gap-6 w-full max-w-lg mx-auto">
+    <div className="flex flex-col items-center gap-4 w-full">
 
       {/* ── Drop zone ────────────────────────────────────────────────────── */}
       <div
@@ -97,12 +97,12 @@ export function FileLoader({ onLoad, isLoading = false, error = null }: FileLoad
         tabIndex={0}
         aria-label="Drop trace file here or click to browse"
         className={[
-          "relative w-full rounded-2xl border-2 border-dashed transition-all duration-200",
-          "flex flex-col items-center justify-center gap-4 px-8 py-12 cursor-pointer",
-          "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+          "relative w-full rounded-lg border-2 border-dashed transition-colors",
+          "flex flex-col items-center justify-center gap-3 px-6 py-10 cursor-pointer",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1",
           isDragging
-            ? "border-blue-500 bg-blue-50 scale-[1.01]"
-            : "border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/40",
+            ? "border-accent bg-accent-soft/50"
+            : "border-border-strong bg-surface hover:border-gray-400 hover:bg-surface-muted",
           busy ? "pointer-events-none opacity-60" : "",
         ].join(" ")}
         onDragOver={handleDragOver}
@@ -130,30 +130,30 @@ export function FileLoader({ onLoad, isLoading = false, error = null }: FileLoad
         {/* Icon */}
         <div
           className={[
-            "flex items-center justify-center w-16 h-16 rounded-2xl transition-colors",
-            isDragging ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-400",
+            "flex items-center justify-center w-10 h-10 rounded-md transition-colors",
+            isDragging ? "bg-accent-soft text-accent" : "bg-gray-100 text-ink-subtle",
           ].join(" ")}
           aria-hidden="true"
         >
           {busy ? (
-            <Loader2 className="w-8 h-8 animate-spin" />
+            <Loader2 className="w-5 h-5 animate-spin" />
           ) : isDragging ? (
-            <FileJson className="w-8 h-8" />
+            <FileJson className="w-5 h-5" />
           ) : (
-            <UploadCloud className="w-8 h-8" />
+            <UploadCloud className="w-5 h-5" />
           )}
         </div>
 
         {/* Labels */}
         <div className="text-center">
-          <p className="text-base font-semibold text-gray-700">
+          <p className="text-sm font-semibold text-ink">
             {busy ? "Loading…" : isDragging ? "Drop to load" : "Drop a trace file here"}
           </p>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-ink-muted">
             or{" "}
-            <span className="text-blue-600 underline underline-offset-2">browse your files</span>
+            <span className="text-accent underline underline-offset-2">browse your files</span>
           </p>
-          <p className="mt-2 text-xs text-gray-400">JSON array or JSONL format</p>
+          <p className="mt-1.5 text-xs text-ink-subtle">JSON array or JSONL format</p>
         </div>
       </div>
 
@@ -161,18 +161,18 @@ export function FileLoader({ onLoad, isLoading = false, error = null }: FileLoad
       {error && (
         <div
           role="alert"
-          className="flex items-start gap-2.5 w-full rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"
+          className="flex items-start gap-2 w-full rounded-md bg-red-50 border border-red-300 p-3 text-sm text-red-800"
         >
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" aria-hidden="true" />
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-loss" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
 
       {/* ── Divider ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 w-full" aria-hidden="true">
-        <hr className="flex-1 border-gray-200" />
-        <span className="text-xs text-gray-400 uppercase tracking-wider">or</span>
-        <hr className="flex-1 border-gray-200" />
+        <hr className="flex-1 border-border" />
+        <span className="text-xs text-ink-subtle">or</span>
+        <hr className="flex-1 border-border" />
       </div>
 
       {/* ── Sample trace button ───────────────────────────────────────────── */}
@@ -181,12 +181,11 @@ export function FileLoader({ onLoad, isLoading = false, error = null }: FileLoad
         onClick={loadSample}
         disabled={busy}
         className="
-          inline-flex items-center gap-2.5 px-5 py-2.5
-          rounded-xl border border-blue-200 bg-blue-50
-          text-sm font-medium text-blue-700
-          hover:bg-blue-100 hover:border-blue-300
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-          disabled:opacity-50 disabled:cursor-not-allowed
+          inline-flex items-center justify-center gap-1.5 h-8 px-3
+          rounded-md border border-border-strong bg-surface
+          text-sm font-medium text-ink
+          hover:bg-surface-muted disabled:text-gray-400
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1
           transition-colors
         "
       >
