@@ -5,9 +5,9 @@
  */
 import React from "react";
 import {
-  Activity, AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, CircleDashed,
+  AlertCircle, CheckCircle2, ChevronDown, ChevronRight, CircleDashed,
   CircleSlash, DollarSign, ExternalLink, FolderGit2, Loader2, Pause, Play, PlusCircle,
-  RefreshCw, RotateCcw, SlidersHorizontal, Target, XCircle, X,
+  RefreshCw, RotateCcw, SlidersHorizontal, XCircle, X,
 } from "lucide-react";
 import {
   createCampaign, fetchAgentIds, fetchCampaign, fetchCampaigns, pauseCampaign, resumeCampaign,
@@ -15,7 +15,7 @@ import {
 } from "../api/agentflow";
 import type { CampaignLimitsUpdate, CampaignStatus, CampaignView, Feature, FeatureStatus } from "../types/campaigns";
 import { workspaceNameError } from "../utils/workspace";
-import { ThemeSwitch } from "./ThemeSwitch";
+import { HomeShell } from "./HomeShell";
 
 type CampaignRoute = { page: "campaigns" } | { page: "new-campaign" } | { page: "campaign"; campaignId: string };
 
@@ -53,27 +53,6 @@ function Progress({ view }: { view: CampaignView }) {
       <div className="cmp-progress-bar"><div className="cmp-progress-fill" style={{ width: `${pct}%` }} /></div>
       <span className="cmp-progress-label">{view.passing}/{view.total} passing</span>
     </div>
-  );
-}
-
-function Shell({ navigate, children }: { navigate: (hash: string) => void; children: React.ReactNode }) {
-  return (
-    <main className="app-hero cmp-shell">
-      <ThemeSwitch className="app-hero-theme" />
-      <div className="app-brand">
-        <Activity className="app-brand-icon" aria-hidden="true" />
-        <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
-      </div>
-      <nav className="cmp-nav">
-        <button type="button" className="cmp-link" onClick={() => navigate("#/")}>
-          <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> Runs
-        </button>
-        <button type="button" className="cmp-link" onClick={() => navigate("#/campaigns")}>
-          <Target className="w-3.5 h-3.5" aria-hidden="true" /> Campaigns
-        </button>
-      </nav>
-      {children}
-    </main>
   );
 }
 
@@ -192,7 +171,7 @@ function NewCampaign({ navigate }: { navigate: (hash: string) => void }) {
     <div className="new-run-card">
       <div className="new-run-header">
         <h2 className="new-run-title">New Campaign</h2>
-        <button type="button" onClick={() => navigate("#/campaigns")} className="new-run-close" aria-label="Cancel">
+        <button type="button" onClick={() => navigate("#/")} className="new-run-close" aria-label="Cancel">
           <X className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
@@ -251,7 +230,7 @@ function NewCampaign({ navigate }: { navigate: (hash: string) => void }) {
         </div>
         {error && <div role="alert" className="new-run-error"><AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" /><span>{error}</span></div>}
         <div className="new-run-footer">
-          <button type="button" className="new-run-btn-cancel" onClick={() => navigate("#/campaigns")} disabled={submitting}>Cancel</button>
+          <button type="button" className="new-run-btn-cancel" onClick={() => navigate("#/")} disabled={submitting}>Cancel</button>
           <button type="submit" className="new-run-btn-submit" disabled={!task.trim() || !!workspaceError || submitting}>
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Play className="w-4 h-4" aria-hidden="true" />}
             {submitting ? "Starting…" : "Start campaign"}
@@ -595,10 +574,10 @@ function CampaignDetail({ campaignId, navigate }: { campaignId: string; navigate
 
 export function CampaignsPage({ route, navigate }: { route: CampaignRoute; navigate: (hash: string) => void }) {
   return (
-    <Shell navigate={navigate}>
+    <HomeShell active="campaigns" navigate={navigate}>
       {route.page === "campaigns" && <CampaignList navigate={navigate} />}
       {route.page === "new-campaign" && <NewCampaign navigate={navigate} />}
       {route.page === "campaign" && <CampaignDetail key={route.campaignId} campaignId={route.campaignId} navigate={navigate} />}
-    </Shell>
+    </HomeShell>
   );
 }

@@ -2,11 +2,9 @@ import React from "react";
 import {
   Activity,
   DollarSign,
-  FileJson2,
   PlusCircle,
   RotateCcw,
   Server,
-  Target,
   AlertCircle,
   X as XIcon,
 } from "lucide-react";
@@ -27,7 +25,6 @@ import {
 } from "./api/agentflow";
 import { computeResultsCost, computeEventsCost } from "./utils/cost";
 import { ArtifactsViewer } from "./components/ArtifactsViewer";
-import { FileLoader } from "./components/FileLoader";
 import { RunSelector } from "./components/RunSelector";
 import { NewRunForm } from "./components/NewRunForm";
 import { FollowupForm } from "./components/FollowupForm";
@@ -40,6 +37,7 @@ import type { AwaitingInputData } from "./components/HumanInputPanel";
 import { StreamingControlBar } from "./components/StreamingControlBar";
 import { CheckpointsViewer } from "./components/CheckpointsViewer";
 import { CampaignsPage } from "./components/CampaignsPage";
+import { HomeShell } from "./components/HomeShell";
 import "./App.css";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 
@@ -52,7 +50,9 @@ import { ThemeSwitch } from "./components/ThemeSwitch";
  *
  *  Hash string        → Route
  *  ─────────────────────────────────────────────────────
- *  ''  |  '#/'        → { page: 'idle' }
+ *  ''  |  '#/'        → { page: 'campaigns' }   (home)
+ *  '#/campaigns'      → { page: 'campaigns' }
+ *  '#/runs'           → { page: 'idle' }        (run list)
  *  '#/runs/new'       → { page: 'new-run' }
  *  '#/runs/:id'       → { page: 'run', runId: id }
  *  '#/runs/:id/followup' → { page: 'followup', runId: id }
@@ -70,7 +70,8 @@ function parseHash(hash: string): Route {
   // Strip leading '#' if present, then normalise the path.
   const path = hash.startsWith("#") ? hash.slice(1) : hash;
 
-  if (!path || path === "/") return { page: "idle" };
+  if (!path || path === "/") return { page: "campaigns" };
+  if (/^\/runs\/?$/.test(path)) return { page: "idle" };
 
   const runsNewRe = /^\/runs\/new\/?$/;
   if (runsNewRe.test(path)) return { page: "new-run" };
@@ -122,20 +123,17 @@ function useHashRouter() {
 // Types
 // ---------------------------------------------------------------------------
 
-type TraceSource =
-  | { type: "file"; fileName: string }
-  | {
-      type: "api";
-      runId: string;
-      name?: string | null;
-      task?: string | null;
-      has_report?: boolean;
-      has_artifacts?: boolean;
-      has_session?: boolean;
-      workspace?: string | null;
-      /** Interrupted by a restart and resumable (from the session log). */
-      resumable?: boolean;
-    };
+type TraceSource = {
+  runId: string;
+  name?: string | null;
+  task?: string | null;
+  has_report?: boolean;
+  has_artifacts?: boolean;
+  has_session?: boolean;
+  workspace?: string | null;
+  /** Interrupted by a restart and resumable (from the session log). */
+  resumable?: boolean;
+};
 
 type AppState =
   | { status: "idle" }
@@ -222,27 +220,6 @@ export default function App() {
     setAppState({ status: "loaded", trace, source, view: "events", report: null, reportLoading: false });
   }
 
-  // ── File load ─────────────────────────────────────────────────────────────
-
-  const handleLoad = React.useCallback((text: string, fileName: string) => {
-    if (text.startsWith("FETCH_ERROR:")) {
-      setAppState({ status: "error", message: text.slice("FETCH_ERROR:".length) });
-      return;
-    }
-    setAppState({ status: "loading" });
-    setSelectedEvent(null);
-    setTimeout(() => {
-      try {
-        enterLoaded(loadTrace(text), { type: "file", fileName });
-        // File loads don't get a URL — stay on '/' (idle hash) but show the
-        // loaded view. The hash is not updated so the browser back button still
-        // works naturally (it just stays on '/' and handleReset resets state).
-      } catch (err) {
-        setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
-      }
-    }, 0);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── API run load (historical or re-join live stream) ─────────────────────
 
   const handleRunLoad = React.useCallback(async (run: RunInfo) => {
@@ -273,7 +250,6 @@ export default function App() {
           try { resultsText = await fetchRunResultsText(run.run_id); } catch { /* optional */ }
         }
         enterLoaded(loadTrace(existingEventsText!, resultsText), {
-          type: "api",
           runId: run.run_id,
           name: run.name,
           task: run.task,
@@ -335,7 +311,6 @@ export default function App() {
         );
       }
       enterLoaded(trace, {
-        type: "api",
         runId: run.run_id,
         name: run.name,
         task: run.task,
@@ -366,13 +341,13 @@ export default function App() {
       const run = runs.find((r) => r.run_id === runId);
       if (!run) {
         setAppState({ status: "error", message: `Run "${runId}" not found.` });
-        navigate("#/");
+        navigate("#/runs");
         return;
       }
       await handleRunLoad(run);
     } catch (err) {
       setAppState({ status: "error", message: err instanceof Error ? err.message : String(err) });
-      navigate("#/");
+      navigate("#/runs");
     }
   }, [handleRunLoad, navigate]);
 
@@ -403,7 +378,7 @@ export default function App() {
   // ── Follow-up run ─────────────────────────────────────────────────────────
 
   function handleFollowupOpen() {
-    if (appState.status !== "loaded" || appState.source.type !== "api") return;
+    if (appState.status !== "loaded") return;
     const { source } = appState;
     navigate(`#/runs/${encodeURIComponent(source.runId)}/followup`);
     setAppState({
@@ -478,7 +453,7 @@ export default function App() {
           return {
             status: "loaded",
             trace,
-            source: { type: "api", runId: activeRunId, task: taskHint },
+            source: { runId: activeRunId, task: taskHint },
             view: "events" as const,
             report: null,
             reportLoading: false,
@@ -521,7 +496,7 @@ export default function App() {
             return {
               status: "loaded",
               trace,
-              source: { type: "api", runId: activeRunId, task: taskHint },
+              source: { runId: activeRunId, task: taskHint },
               view: "events" as const,
               report: null,
               reportLoading: false,
@@ -546,7 +521,7 @@ export default function App() {
   // ── Reset ─────────────────────────────────────────────────────────────────
 
   function handleReset() {
-    navigate("#/");
+    navigate("#/runs");
     setAppState({ status: "idle" });
     setSelectedEvent(null);
     setSelectedTypes(new Set());
@@ -608,7 +583,7 @@ export default function App() {
       if (appState.status === "followup" && appState.priorRunId === runId) return;
 
       // If loaded for this run: open the followup form state.
-      if (appState.status === "loaded" && appState.source.type === "api" && appState.source.runId === runId) {
+      if (appState.status === "loaded" && appState.source.runId === runId) {
         const { source } = appState;
         setAppState({
           status: "followup",
@@ -641,7 +616,7 @@ export default function App() {
 
     // Only load from URL if we're not already displaying this run.
     const alreadyDisplayed =
-      (appState.status === "loaded" && appState.source.type === "api" && appState.source.runId === runId) ||
+      (appState.status === "loaded" && appState.source.runId === runId) ||
       (appState.status === "streaming" && appState.runId === runId);
 
     if (!alreadyDisplayed) {
@@ -662,7 +637,6 @@ export default function App() {
     if (
       route.page === "followup" &&
       appState.status === "loaded" &&
-      appState.source.type === "api" &&
       appState.source.runId === route.runId
     ) {
       const { source } = appState;
@@ -693,90 +667,51 @@ export default function App() {
   }
 
   // ===========================================================================
-  // Render: idle / loading / error  →  hero with RunSelector + FileLoader
+  // Render: idle / loading / error  →  Runs section with the run list
   // ===========================================================================
 
   if (appState.status === "idle" || appState.status === "error" || appState.status === "loading") {
-    const isLoading = appState.status === "loading";
     return (
-      <main className="app-hero">
-        <ThemeSwitch className="app-hero-theme" />
-        <div className="app-brand">
-          <Activity className="app-brand-icon" aria-hidden="true" />
-          <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
-        </div>
-        <p className="app-brand-subtitle">
-          Browse previous runs from the agentflow service, or load a trace file directly.
-        </p>
-
+      <HomeShell active="runs" navigate={navigate}>
         {appState.status === "error" && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 w-full rounded-md bg-red-50 border border-red-300 p-3 text-sm text-red-800"
-          >
-            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-loss" aria-hidden="true" />
+          <div role="alert" className="cmp-error">
+            <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{appState.message}</span>
           </div>
         )}
-
-        <div className="hero-panels">
-          <div className="hero-panel-section">
-            <div className="hero-panel-heading-row">
-              <p className="hero-panel-heading">From agentflow service</p>
-              <button type="button" className="hero-campaigns-link" onClick={() => navigate("#/campaigns")}>
-                <Target className="w-3.5 h-3.5" aria-hidden="true" />
-                Campaigns
-              </button>
-            </div>
-            <RunSelector
-              onSelectRun={handleRunLoad}
-              onNewRun={handleNewRunOpen}
-              isLoading={isLoading}
-            />
-          </div>
-          <div className="hero-panel-section">
-            <p className="hero-panel-heading">From file</p>
-            <FileLoader onLoad={handleLoad} isLoading={isLoading} />
-          </div>
-        </div>
-      </main>
+        <RunSelector
+          onSelectRun={handleRunLoad}
+          onNewRun={handleNewRunOpen}
+          isLoading={appState.status === "loading"}
+        />
+      </HomeShell>
     );
   }
 
   // ===========================================================================
-  // Render: new-run  →  hero with form
+  // Render: new-run  →  Runs section with form
   // ===========================================================================
 
   if (appState.status === "new-run") {
     return (
-      <main className="app-hero">
-        <ThemeSwitch className="app-hero-theme" />
-        <div className="app-brand">
-          <Activity className="app-brand-icon" aria-hidden="true" />
-          <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
-        </div>
+      <HomeShell active="runs" navigate={navigate}>
         <NewRunForm
           onSubmit={handleNewRunSubmit}
           onCancel={handleReset}
           isSubmitting={appState.isSubmitting}
           submitError={appState.submitError}
         />
-      </main>
+      </HomeShell>
     );
   }
 
   // ===========================================================================
-  // Render: followup  →  hero with follow-up form
+  // Render: followup  →  Runs section with follow-up form
   // ===========================================================================
 
   if (appState.status === "followup") {
     return (
-      <main className="app-hero">
-        <ThemeSwitch className="app-hero-theme" />
-        <div className="app-brand">
-          <Activity className="app-brand-icon" aria-hidden="true" />
-          <h1 className="app-brand-title">AgentFlow Trace Viewer</h1>
-        </div>
+      <HomeShell active="runs" navigate={navigate}>
         <FollowupForm
           priorRunId={appState.priorRunId}
           priorName={appState.priorName}
@@ -786,7 +721,7 @@ export default function App() {
           isSubmitting={appState.isSubmitting}
           submitError={appState.submitError}
         />
-      </main>
+      </HomeShell>
     );
   }
 
@@ -903,13 +838,11 @@ export default function App() {
 
   const { trace, source, view, report, reportLoading } = appState;
   const sourceLabel =
-    source.type === "file"
-      ? source.fileName
-      : (source.name ?? `run_${source.runId.slice(0, 8)}…`);
+    source.name ?? `run_${source.runId.slice(0, 8)}…`;
 
-  const hasReport = source.type === "api" && !!source.has_report;
-  const hasArtifacts = source.type === "api" && !!source.has_artifacts;
-  const hasCheckpoints = source.type === "api" && !!source.has_session;
+  const hasReport = !!source.has_report;
+  const hasArtifacts = !!source.has_artifacts;
+  const hasCheckpoints = !!source.has_session;
   const showTabs = hasReport || hasArtifacts || hasCheckpoints;
 
   // Total cost: the session log's cost_added sum is exact (it includes retries,
@@ -922,7 +855,6 @@ export default function App() {
         : computeEventsCost(trace.events);
 
   async function handleResume() {
-    if (source.type !== "api") return;
     const runId = source.runId;
     setAppState((prev) => prev.status === "loaded" ? { ...prev, resuming: true, resumeError: null } : prev);
     try {
@@ -940,7 +872,7 @@ export default function App() {
   }
 
   async function handleSwitchView(next: "events" | "report" | "artifacts" | "checkpoints") {
-    if (next === "report" && source.type === "api" && !report) {
+    if (next === "report" && !report) {
       setAppState((prev) =>
         prev.status === "loaded" ? { ...prev, view: "report", reportLoading: true } : prev,
       );
@@ -973,11 +905,7 @@ export default function App() {
         </div>
 
         <div className="app-topbar-file">
-          {source.type === "file" ? (
-            <FileJson2 className="w-4 h-4 text-ink-subtle shrink-0" aria-hidden="true" />
-          ) : (
-            <Server className="w-4 h-4 text-ink-subtle shrink-0" aria-hidden="true" />
-          )}
+          <Server className="w-4 h-4 text-ink-subtle shrink-0" aria-hidden="true" />
           <span
             className="app-topbar-filename"
             title={trace.run_id}
@@ -992,7 +920,7 @@ export default function App() {
               from session log
             </span>
           )}
-          {source.type === "api" && source.workspace && (
+          {source.workspace && (
             <span className="app-topbar-workspace" title="Workspace this run worked in">
               {source.workspace}
             </span>
@@ -1058,7 +986,7 @@ export default function App() {
         )}
 
         <div className="app-topbar-actions">
-          {source.type === "api" && source.resumable && (
+          {source.resumable && (
             <button
               type="button"
               onClick={handleResume}
@@ -1071,25 +999,23 @@ export default function App() {
             </button>
           )}
 
-          {source.type === "api" && (
-            <button
-              type="button"
-              onClick={handleFollowupOpen}
-              className="app-topbar-followup-btn"
-              aria-label="Start follow-up run"
-              title="Start follow-up run"
-            >
-              <PlusCircle className="w-4 h-4" aria-hidden="true" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleFollowupOpen}
+            className="app-topbar-followup-btn"
+            aria-label="Start follow-up run"
+            title="Start follow-up run"
+          >
+            <PlusCircle className="w-4 h-4" aria-hidden="true" />
+          </button>
 
           <ThemeSwitch />
           <button
             type="button"
             onClick={handleReset}
             className="app-topbar-reload"
-            aria-label="Close trace and load another"
-            title="Close trace and load another"
+            aria-label="Close run"
+            title="Close run"
           >
             <XIcon className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -1132,10 +1058,10 @@ export default function App() {
         {view === "report" && (
           <ReportViewer markdown={report} isLoading={reportLoading} />
         )}
-        {view === "artifacts" && source.type === "api" && (
+        {view === "artifacts" && (
           <ArtifactsViewer runId={source.runId} />
         )}
-        {view === "checkpoints" && source.type === "api" && (
+        {view === "checkpoints" && (
           <CheckpointsViewer runId={source.runId} workspace={source.workspace ?? null} />
         )}
       </div>

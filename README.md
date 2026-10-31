@@ -18,7 +18,10 @@ CORS from `localhost:3000` and `:5173`–`:5175`.
 
 ## What it shows
 
-**Runs** (`#/runs/:id`)
+The home page (`#/`) is the campaign list; a **Campaigns | Runs** tab bar switches to the
+run list (`#/runs`).
+
+**Runs** (`#/runs`, `#/runs/:id`)
 - **Live view:** the SSE stream, with message-the-agent, cancel, and budget/iteration
   approvals. A cancel that another server replica owns shows "Cancel sent to owning
   replica…".
@@ -36,14 +39,12 @@ CORS from `localhost:3000` and `:5173`–`:5175`.
 - **Workspaces:** new runs and follow-ups can name a project workspace. Follow-ups
   continue in the prior run's workspace by default.
 
-**Campaigns** (`#/campaigns`)
+**Campaigns** (`#/`, also `#/campaigns`)
 - **List and create:** each campaign shows its progress. Creating one takes the spec,
   agent, session limit, budgets and workspace.
 - **Detail:** the feature ledger (status, failed attempts, the verifier's evidence per
   check, the last session's notes), the sessions (each opens as a run), and pause/resume.
   The page refreshes while the campaign is active.
-
-**From file:** load an `events.jsonl` (or a JSON array) exported from a run.
 
 ## How it fits the AgentFlow API
 
@@ -70,4 +71,5 @@ alone, because worker processes and resumed runs number their own events.
 | `src/utils/sessionTrace.ts` | Session log → timeline conversion, and resume detection |
 | `src/components/TimelineView.tsx`, `EventDetail.tsx` | Timeline and detail panel |
 | `src/components/CheckpointsViewer.tsx` | Checkpoints tab |
+| `src/components/HomeShell.tsx` | Header and Campaigns / Runs tabs for the non-trace pages |
 | `src/components/CampaignsPage.tsx` | Campaign list, form and ledger |

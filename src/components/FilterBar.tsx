@@ -6,6 +6,7 @@
  *  - A time-range slider pair (start offset / end offset in ms).
  *  - An "All events" chip showing the current filtered count.
  *  - A "Reset" button that restores defaults.
+ *  The type and time controls collapse behind the header; the choice is remembered.
  *
  * Props
  * -----
@@ -20,9 +21,19 @@
  */
 
 import React from "react";
-import { SlidersHorizontal, RotateCcw } from "lucide-react";
+import { SlidersHorizontal, RotateCcw, ChevronRight } from "lucide-react";
 import type { EventTypeValue, TimeRange } from "../types/events";
 import { EVENT_META } from "./timelineUtils";
+
+const EXPANDED_KEY = "filterbar-expanded";
+
+function readExpanded(): boolean {
+  try {
+    return localStorage.getItem(EXPANDED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export interface FilterBarProps {
   availableTypes: Set<EventTypeValue>;
@@ -46,6 +57,17 @@ export function FilterBar({
   filteredCount,
 }: FilterBarProps) {
   const duration = timeRange.durationMs;
+  const [expanded, setExpanded] = React.useState(readExpanded);
+
+  function toggleExpanded() {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      localStorage.setItem(EXPANDED_KEY, next ? "1" : "0");
+    } catch {
+      // storage blocked: the choice still applies until reload
+    }
+  }
 
   // ── Checkbox toggle ──────────────────────────────────────────────────────
 
@@ -93,15 +115,29 @@ export function FilterBar({
   }
 
   const sortedTypes = [...availableTypes].sort();
+  const hiddenTypes = availableTypes.size - selectedTypes.size;
+  const timeNarrowed = selectedTimeRange[0] !== 0 || selectedTimeRange[1] !== duration;
+  const summary = [
+    hiddenTypes > 0 && `${hiddenTypes} type${hiddenTypes === 1 ? "" : "s"} hidden`,
+    timeNarrowed && `${fmtOffset(selectedTimeRange[0])} – ${fmtOffset(selectedTimeRange[1])}`,
+  ].filter(Boolean).join(" · ");
 
   return (
-    <div className="filterbar-root">
-      {/* ── Header row ──────────────────────────────────────────────────── */}
+    <div className={`filterbar-root ${expanded ? "" : "filterbar-root--collapsed"}`}>
+      {/* ── Header row (toggles the controls) ───────────────────────────── */}
       <div className="filterbar-header">
-        <div className="filterbar-title">
+        <button
+          type="button"
+          className="filterbar-title"
+          onClick={toggleExpanded}
+          aria-expanded={expanded}
+          aria-controls={expanded ? "filterbar-controls" : undefined}
+        >
+          <ChevronRight className="filterbar-chevron" aria-hidden="true" />
           <SlidersHorizontal className="filterbar-title-icon" aria-hidden="true" />
           <span>Filters</span>
-        </div>
+          {!expanded && summary && <span className="filterbar-summary">{summary}</span>}
+        </button>
 
         <div className="filterbar-count-row">
           <span className="filterbar-count-chip">
@@ -122,102 +158,106 @@ export function FilterBar({
         </div>
       </div>
 
-      {/* ── Event types ─────────────────────────────────────────────────── */}
-      <fieldset className="filterbar-fieldset">
-        <legend className="filterbar-legend">Event Types</legend>
-        <div className="filterbar-chips">
-          {sortedTypes.map((type) => {
-            const meta = EVENT_META[type];
-            if (!meta) return null;
-            const checked = selectedTypes.has(type);
-            const checkboxId = `filter-type-${type.replace(/:/g, "-")}`;
-            return (
-              <label
-                key={type}
-                htmlFor={checkboxId}
-                className={[
-                  "filterbar-chip",
-                  checked ? "filterbar-chip--active" : "filterbar-chip--inactive",
-                ].join(" ")}
-              >
-                <input
-                  id={checkboxId}
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleType(type)}
-                  className="sr-only"
-                />
-                {/* Colour dot */}
-                <span
-                  className={`filterbar-chip-dot ${meta.dot}`}
-                  aria-hidden="true"
-                />
-                {meta.label}
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
+      {expanded && (
+        <div id="filterbar-controls" className="filterbar-controls">
+          {/* ── Event types ─────────────────────────────────────────────────── */}
+          <fieldset className="filterbar-fieldset">
+            <legend className="filterbar-legend">Event Types</legend>
+            <div className="filterbar-chips">
+              {sortedTypes.map((type) => {
+                const meta = EVENT_META[type];
+                if (!meta) return null;
+                const checked = selectedTypes.has(type);
+                const checkboxId = `filter-type-${type.replace(/:/g, "-")}`;
+                return (
+                  <label
+                    key={type}
+                    htmlFor={checkboxId}
+                    className={[
+                      "filterbar-chip",
+                      checked ? "filterbar-chip--active" : "filterbar-chip--inactive",
+                    ].join(" ")}
+                  >
+                    <input
+                      id={checkboxId}
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleType(type)}
+                      className="sr-only"
+                    />
+                    {/* Colour dot */}
+                    <span
+                      className={`filterbar-chip-dot ${meta.dot}`}
+                      aria-hidden="true"
+                    />
+                    {meta.label}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
 
-      {/* ── Time range ──────────────────────────────────────────────────── */}
-      {duration > 0 && (
-        <div className="filterbar-time">
-          <p className="filterbar-legend">
-            Time Range
-            <span className="filterbar-time-display">
-              {fmtOffset(selectedTimeRange[0])} – {fmtOffset(selectedTimeRange[1])}
-            </span>
-          </p>
-          <div className="filterbar-sliders">
-            {/* Start slider */}
-            <div className="filterbar-slider-row">
-              <label
-                htmlFor="filter-start"
-                className="filterbar-slider-label"
-              >
-                Start
-              </label>
-              <input
-                id="filter-start"
-                type="range"
-                min={0}
-                max={duration}
-                step={Math.max(1, Math.round(duration / 1000))}
-                value={selectedTimeRange[0]}
-                onChange={handleStartChange}
-                className="filterbar-slider"
-                aria-valuemin={0}
-                aria-valuemax={duration}
-                aria-valuenow={selectedTimeRange[0]}
-                aria-valuetext={fmtOffset(selectedTimeRange[0])}
-              />
-              <span className="filterbar-slider-val">{fmtOffset(selectedTimeRange[0])}</span>
+          {/* ── Time range ──────────────────────────────────────────────────── */}
+          {duration > 0 && (
+            <div className="filterbar-time">
+              <p className="filterbar-legend">
+                Time Range
+                <span className="filterbar-time-display">
+                  {fmtOffset(selectedTimeRange[0])} – {fmtOffset(selectedTimeRange[1])}
+                </span>
+              </p>
+              <div className="filterbar-sliders">
+                {/* Start slider */}
+                <div className="filterbar-slider-row">
+                  <label
+                    htmlFor="filter-start"
+                    className="filterbar-slider-label"
+                  >
+                    Start
+                  </label>
+                  <input
+                    id="filter-start"
+                    type="range"
+                    min={0}
+                    max={duration}
+                    step={Math.max(1, Math.round(duration / 1000))}
+                    value={selectedTimeRange[0]}
+                    onChange={handleStartChange}
+                    className="filterbar-slider"
+                    aria-valuemin={0}
+                    aria-valuemax={duration}
+                    aria-valuenow={selectedTimeRange[0]}
+                    aria-valuetext={fmtOffset(selectedTimeRange[0])}
+                  />
+                  <span className="filterbar-slider-val">{fmtOffset(selectedTimeRange[0])}</span>
+                </div>
+                {/* End slider */}
+                <div className="filterbar-slider-row">
+                  <label
+                    htmlFor="filter-end"
+                    className="filterbar-slider-label"
+                  >
+                    End
+                  </label>
+                  <input
+                    id="filter-end"
+                    type="range"
+                    min={0}
+                    max={duration}
+                    step={Math.max(1, Math.round(duration / 1000))}
+                    value={selectedTimeRange[1]}
+                    onChange={handleEndChange}
+                    className="filterbar-slider"
+                    aria-valuemin={0}
+                    aria-valuemax={duration}
+                    aria-valuenow={selectedTimeRange[1]}
+                    aria-valuetext={fmtOffset(selectedTimeRange[1])}
+                  />
+                  <span className="filterbar-slider-val">{fmtOffset(selectedTimeRange[1])}</span>
+                </div>
+              </div>
             </div>
-            {/* End slider */}
-            <div className="filterbar-slider-row">
-              <label
-                htmlFor="filter-end"
-                className="filterbar-slider-label"
-              >
-                End
-              </label>
-              <input
-                id="filter-end"
-                type="range"
-                min={0}
-                max={duration}
-                step={Math.max(1, Math.round(duration / 1000))}
-                value={selectedTimeRange[1]}
-                onChange={handleEndChange}
-                className="filterbar-slider"
-                aria-valuemin={0}
-                aria-valuemax={duration}
-                aria-valuenow={selectedTimeRange[1]}
-                aria-valuetext={fmtOffset(selectedTimeRange[1])}
-              />
-              <span className="filterbar-slider-val">{fmtOffset(selectedTimeRange[1])}</span>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>

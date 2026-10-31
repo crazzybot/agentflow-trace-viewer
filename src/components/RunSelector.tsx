@@ -10,6 +10,8 @@ import {
   CirclePause,
   ChevronRight,
   Plus,
+  Search,
+  X,
 } from "lucide-react";
 import type { RunInfo } from "../types/runs";
 import { fetchRuns } from "../api/agentflow";
@@ -34,6 +36,14 @@ function formatAge(isoString: string): string {
 
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "…" : text;
+}
+
+/** Every whitespace-separated term must appear in the run's name, task, id or workspace. */
+function matchesQuery(run: RunInfo, query: string): boolean {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const haystack = [run.name, run.task, run.run_id, run.workspace].filter(Boolean).join("\n").toLowerCase();
+  return terms.every((t) => haystack.includes(t));
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +75,10 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
   }, []);
 
   React.useEffect(() => { load(); }, [load]);
+
+  const [query, setQuery] = React.useState("");
+  const runs = React.useMemo(() => (fetchState.status === "loaded" ? fetchState.runs : []), [fetchState]);
+  const visibleRuns = React.useMemo(() => runs.filter((r) => matchesQuery(r, query)), [runs, query]);
 
   return (
     <div className="run-selector">
@@ -98,6 +112,38 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
         </div>
       </div>
 
+      {runs.length > 0 && (
+        <div className="run-selector-search">
+          <div className="run-selector-search-field">
+            <Search className="run-selector-search-icon" aria-hidden="true" />
+            <input
+              type="search"
+              className="new-run-input run-selector-search-input"
+              placeholder="Search by name, task, run ID or workspace"
+              aria-label="Search runs"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
+            />
+            {query && (
+              <button
+                type="button"
+                className="run-selector-search-clear"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+              >
+                <X className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {query && (
+            <span className="run-selector-search-count" aria-live="polite">
+              {visibleRuns.length} of {runs.length}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="run-selector-body">
         {fetchState.status === "loading" && (
           <div className="run-selector-status">
@@ -124,9 +170,15 @@ export function RunSelector({ onSelectRun, onNewRun, isLoading = false }: RunSel
           </div>
         )}
 
-        {fetchState.status === "loaded" && fetchState.runs.length > 0 && (
+        {runs.length > 0 && visibleRuns.length === 0 && (
+          <div className="run-selector-empty">
+            <p className="text-sm text-ink-subtle">No runs match “{query.trim()}”</p>
+          </div>
+        )}
+
+        {visibleRuns.length > 0 && (
           <ul className="run-selector-list" role="list">
-            {fetchState.runs.map((run) => (
+            {visibleRuns.map((run) => (
               <li key={run.run_id}>
                 <button
                   type="button"
