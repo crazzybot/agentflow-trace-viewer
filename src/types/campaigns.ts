@@ -21,13 +21,16 @@ export interface Feature {
   sessions?: string[];
   /** Operator guidance for the next session on this feature (set by a retry). */
   guidance?: string;
+  /** Agent this feature runs on: the campaign's pinned agent, else the planner's choice. */
+  agent_id?: string | null;
 }
 
 export interface Campaign {
   campaign_id: string;
   task: string;
   workspace: string;
-  agent_id: string;
+  /** Agent every feature runs on; empty/null when the planner picks per feature. */
+  agent_id: string | null;
   max_sessions: number;
   budget_usd: number | null;
   session_budget_usd: number | null;
@@ -58,6 +61,7 @@ export interface CampaignLimitsUpdate {
 
 export interface CreateCampaignRequest {
   task: string;
+  /** Omit to let the planner pick an agent per feature (falls back to CAMPAIGN_DEFAULT_AGENT). */
   agent_id?: string;
   max_sessions?: number;
   budget_usd?: number;

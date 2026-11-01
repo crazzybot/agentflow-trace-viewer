@@ -128,7 +128,8 @@ function CampaignList({ navigate }: { navigate: (hash: string) => void }) {
 function NewCampaign({ navigate }: { navigate: (hash: string) => void }) {
   const [task, setTask] = React.useState("");
   const [agents, setAgents] = React.useState<string[]>([]);
-  const [agentId, setAgentId] = React.useState("CodeAgent");
+  // "" = let the planner pick an agent per feature (agent_id omitted).
+  const [agentId, setAgentId] = React.useState("");
   const [maxSessions, setMaxSessions] = React.useState("10");
   const [budget, setBudget] = React.useState("");
   const [sessionBudget, setSessionBudget] = React.useState("");
@@ -138,10 +139,7 @@ function NewCampaign({ navigate }: { navigate: (hash: string) => void }) {
   const workspaceError = workspaceNameError(workspace);
 
   React.useEffect(() => {
-    fetchAgentIds().then((ids) => {
-      setAgents(ids);
-      if (ids.length && !ids.includes("CodeAgent")) setAgentId(ids[0]);
-    }).catch(() => { /* fall back to free text */ });
+    fetchAgentIds().then(setAgents).catch(() => { /* fall back to free text */ });
   }, []);
 
   const positive = (s: string) => { const n = parseFloat(s); return s.trim() && n > 0 ? n : undefined; };
@@ -189,11 +187,18 @@ function NewCampaign({ navigate }: { navigate: (hash: string) => void }) {
             <label className="new-run-label" htmlFor="cmp-agent">Agent</label>
             {agents.length > 0 ? (
               <select id="cmp-agent" className="new-run-input cmp-select" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={submitting}>
+                <option value="">Planner picks per feature</option>
                 {agents.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             ) : (
-              <input id="cmp-agent" className="new-run-input" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={submitting} />
+              <input id="cmp-agent" className="new-run-input" value={agentId} onChange={(e) => setAgentId(e.target.value)}
+                placeholder="planner picks per feature" disabled={submitting} />
             )}
+            <p className="new-run-hint">
+              {agentId.trim()
+                ? "Every feature runs on this agent."
+                : "The planner assigns an agent to each feature, falling back to the server default."}
+            </p>
           </div>
           <div className="new-run-field">
             <label className="new-run-label" htmlFor="cmp-max">Max sessions</label>
@@ -279,6 +284,7 @@ function FeatureRow({
           <span className="cmp-feature-title">{feature.title}</span>
           <span className="cmp-feature-meta">
             {feature.status}
+            {feature.agent_id && ` · ${feature.agent_id}`}
             {feature.attempts ? ` · ${feature.attempts} failed attempt${feature.attempts !== 1 ? "s" : ""}` : ""}
             {sessions.length > 0 && ` · ${sessions.length} session${sessions.length !== 1 ? "s" : ""}`}
           </span>
@@ -515,7 +521,7 @@ function CampaignDetail({ campaignId, navigate }: { campaignId: string; navigate
         <span>Sessions <b>{c.sessions.length}</b> / {c.max_sessions}</span>
         <span>Spent <b>{money(c.spent_usd)}</b>{c.budget_usd != null ? <> of {money(c.budget_usd)}</> : " (no budget limit)"}</span>
         {c.session_budget_usd != null && <span>Per session {money(c.session_budget_usd)}</span>}
-        <span>Agent <b>{c.agent_id}</b></span>
+        <span>Agent <b>{c.agent_id || "per feature"}</b></span>
         <span className="font-mono">workspace/{c.workspace}</span>
         {canEditLimits && !editingLimits && (
           <button type="button" className="cmp-link" onClick={() => setEditingLimits(true)}>
